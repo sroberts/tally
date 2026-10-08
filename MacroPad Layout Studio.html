@@ -490,7 +490,11 @@ ${herdrConfig().split("\n").map(l => "#   " + l).join("\n").replace(/ +$/gm, "")
 # tally-layout: ${JSON.stringify(state)}
 
 import time
+import usb_cdc
 from adafruit_macropad import MacroPad
+
+import render
+import tally_link
 
 macropad = MacroPad()
 KC = macropad.Keycode
@@ -504,7 +508,6 @@ BRIGHTNESS = ${Number(state.brightness).toFixed(2)}
 
 # ---------------------------------------------------------------- colors
 ${colorLines}
-PRESS = (255, 255, 255)
 
 # ---------------------------------------------------------------- primitives
 def combo(*keys):
@@ -574,42 +577,53 @@ SCREENS = [build_screen(layer) for layer in LAYERS]
 macropad.pixels.auto_write = False
 macropad.pixels.brightness = BRIGHTNESS
 
+# ---------------------------------------------------------------- tally
+# Status lights from the Tally daemon over the USB CDC data port (boot.py
+# enables it). Without Tally running, render.py keeps the static colors.
+PAINT_EVERY = 33  # ms, about 30 fps
+link = tally_link.Link(usb_cdc.data) if usb_cdc.data else None
 
-def paint(layer):
-    for i, key in enumerate(layer["keys"]):
-        macropad.pixels[i] = key[1]
+
+def ms():
+    return time.monotonic_ns() // 1000000
+
+
+def paint(layer, held, now):
+    if link:
+        frame, status = link.frame, link.status(now)
+    else:
+        frame, status = None, render.NONE
+    for i, color in enumerate(render.render(layer, frame, status, held, now)):
+        macropad.pixels[i] = color
     macropad.pixels.show()
-
-
-def activate(index):
-    paint(LAYERS[index])
-    SCREENS[index].show()
 
 
 # ---------------------------------------------------------------- main loop
 layer_index = 0
-activate(layer_index)
+SCREENS[layer_index].show()
 last_position = macropad.encoder
+held = set()
+next_paint = 0
 
 while True:
     layer = LAYERS[layer_index]
 
+    # Keys first, lighting second: a slow or absent host never delays a keystroke.
     event = macropad.keys.events.get()
     if event:
         n = event.key_number
         action = layer["keys"][n][2]
         if event.pressed:
-            macropad.pixels[n] = PRESS
-            macropad.pixels.show()
+            held.add(n)
             if isinstance(action, Hold):
                 action.down()
             else:
                 action()
+            next_paint = 0  # show the press now
         else:
+            held.discard(n)
             if isinstance(action, Hold):
                 action.up()
-            macropad.pixels[n] = layer["keys"][n][1]
-            macropad.pixels.show()
 
     position = macropad.encoder
     if position != last_position:
@@ -621,8 +635,18 @@ while True:
     macropad.encoder_switch_debounced.update()
     if macropad.encoder_switch_debounced.pressed:
         kbd.release_all()  # never leave a held key stuck across layers
+        held.clear()
         layer_index = (layer_index + 1) % len(LAYERS)
-        activate(layer_index)
+        layer = LAYERS[layer_index]
+        SCREENS[layer_index].show()
+        next_paint = 0
+
+    now = ms()
+    if link:
+        link.poll(now)
+    if now >= next_paint:
+        paint(layer, held, now)
+        next_paint = now + PAINT_EVERY
 `;
   }
 

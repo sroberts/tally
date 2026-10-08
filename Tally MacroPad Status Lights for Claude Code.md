@@ -260,6 +260,8 @@ Without a frame (Tally not installed), `render.py` falls back to the static per-
 
 MacroPad keys number 0 through 11, row-major from the top-left: row 1 is keys 0-2, row 4 is keys 9-11. Fleet slots 1-6 map to keys 0-5.
 
+The key numbers in the tables below describe the default layout. `render.py` matches keys by OLED label (`A1`-`A6`, `ATTN`, `ENTER`, `ESC`, ...), not position, so a layout rearranged in MacroPad Layout Studio keeps its lighting.
+
 ### Lighting by layer
 
 **Fleet layer**

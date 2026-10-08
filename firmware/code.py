@@ -22,7 +22,11 @@
 # tally-layout: {"prefix":"CONTROL+B","brightness":0.3,"gap":0.08,"layers":[{"name":"DRIVE","cw":{"type":"combo","mods":[],"key":"DOWN_ARROW"},"ccw":{"type":"combo","mods":[],"key":"UP_ARROW"},"keys":[{"label":"ESC","color":"RED","action":{"type":"combo","mods":[],"key":"ESCAPE"}},{"label":"MODE","color":"BLUE","action":{"type":"combo","mods":["SHIFT"],"key":"TAB"}},{"label":"REWIND","color":"BLUE","action":{"type":"rewind"}},{"label":"YES","color":"AMBER","action":{"type":"combo","mods":[],"key":"ONE"}},{"label":"ALWAYS","color":"AMBER","action":{"type":"combo","mods":[],"key":"TWO"}},{"label":"NO","color":"AMBER","action":{"type":"combo","mods":[],"key":"THREE"}},{"label":"TAB","color":"WHITE","action":{"type":"combo","mods":[],"key":"TAB"}},{"label":"LOG","color":"WHITE","action":{"type":"combo","mods":["CONTROL"],"key":"O"}},{"label":"COMPCT","color":"WHITE","action":{"type":"text","text":"/compact","enter":true}},{"label":"ENTER","color":"GREEN","action":{"type":"combo","mods":[],"key":"ENTER"}},{"label":"TALK","color":"PURPLE","action":{"type":"hold","mods":[],"key":"RIGHT_ALT"}},{"label":"BG","color":"WHITE","action":{"type":"background"}}]},{"name":"FLEET","cw":{"type":"herdr","id":"next_agent"},"ccw":{"type":"herdr","id":"previous_agent"},"keys":[{"label":"A1","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":1}},{"label":"A2","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":2}},{"label":"A3","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":3}},{"label":"A4","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":4}},{"label":"A5","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":5}},{"label":"A6","color":"WHITE","action":{"type":"herdr","id":"focus_agent","n":6}},{"label":"ATTN","color":"AMBER","action":{"type":"herdr","id":"open_notification_target"}},{"label":"NEW","color":"BLUE","action":{"type":"herdr","id":"new_claude"}},{"label":"RESUME","color":"BLUE","action":{"type":"herdr","id":"resume_claude"}},{"label":"ZOOM","color":"BLUE","action":{"type":"herdr","id":"zoom"}},{"label":"LAST","color":"BLUE","action":{"type":"herdr","id":"last_pane"}},{"label":"ENTER","color":"GREEN","action":{"type":"combo","mods":[],"key":"ENTER"}}]}]}
 
 import time
+import usb_cdc
 from adafruit_macropad import MacroPad
+
+import render
+import tally_link
 
 macropad = MacroPad()
 KC = macropad.Keycode
@@ -45,7 +49,6 @@ BLUE = (0, 60, 255)
 PURPLE = (140, 0, 255)
 MAGENTA = (255, 0, 150)
 WHITE = (60, 60, 60)
-PRESS = (255, 255, 255)
 
 # ---------------------------------------------------------------- primitives
 def combo(*keys):
@@ -152,42 +155,53 @@ SCREENS = [build_screen(layer) for layer in LAYERS]
 macropad.pixels.auto_write = False
 macropad.pixels.brightness = BRIGHTNESS
 
+# ---------------------------------------------------------------- tally
+# Status lights from the Tally daemon over the USB CDC data port (boot.py
+# enables it). Without Tally running, render.py keeps the static colors.
+PAINT_EVERY = 33  # ms, about 30 fps
+link = tally_link.Link(usb_cdc.data) if usb_cdc.data else None
 
-def paint(layer):
-    for i, key in enumerate(layer["keys"]):
-        macropad.pixels[i] = key[1]
+
+def ms():
+    return time.monotonic_ns() // 1000000
+
+
+def paint(layer, held, now):
+    if link:
+        frame, status = link.frame, link.status(now)
+    else:
+        frame, status = None, render.NONE
+    for i, color in enumerate(render.render(layer, frame, status, held, now)):
+        macropad.pixels[i] = color
     macropad.pixels.show()
-
-
-def activate(index):
-    paint(LAYERS[index])
-    SCREENS[index].show()
 
 
 # ---------------------------------------------------------------- main loop
 layer_index = 0
-activate(layer_index)
+SCREENS[layer_index].show()
 last_position = macropad.encoder
+held = set()
+next_paint = 0
 
 while True:
     layer = LAYERS[layer_index]
 
+    # Keys first, lighting second: a slow or absent host never delays a keystroke.
     event = macropad.keys.events.get()
     if event:
         n = event.key_number
         action = layer["keys"][n][2]
         if event.pressed:
-            macropad.pixels[n] = PRESS
-            macropad.pixels.show()
+            held.add(n)
             if isinstance(action, Hold):
                 action.down()
             else:
                 action()
+            next_paint = 0  # show the press now
         else:
+            held.discard(n)
             if isinstance(action, Hold):
                 action.up()
-            macropad.pixels[n] = layer["keys"][n][1]
-            macropad.pixels.show()
 
     position = macropad.encoder
     if position != last_position:
@@ -199,5 +213,15 @@ while True:
     macropad.encoder_switch_debounced.update()
     if macropad.encoder_switch_debounced.pressed:
         kbd.release_all()  # never leave a held key stuck across layers
+        held.clear()
         layer_index = (layer_index + 1) % len(LAYERS)
-        activate(layer_index)
+        layer = LAYERS[layer_index]
+        SCREENS[layer_index].show()
+        next_paint = 0
+
+    now = ms()
+    if link:
+        link.poll(now)
+    if now >= next_paint:
+        paint(layer, held, now)
+        next_paint = now + PAINT_EVERY
