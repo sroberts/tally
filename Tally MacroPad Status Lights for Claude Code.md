@@ -129,14 +129,11 @@ The daemon is a single static Go binary with one goroutine owning all state; eve
 
 ### Slot computation
 
-Tally reproduces herdr's `spaces` sidebar order, which is the order `focus_agent` uses:
+Slot n is the snapshot's `agents[n-1]`. Under the default `spaces` sort, herdr draws the Agent sidebar straight from that list, and `focus_agent` indexes it. The server builds the list by walking workspaces, then tabs, then each tab's panes in layout order, and Tally keeps that order rather than recomputing it (herdr v0.9.3: `collect_agent_infos` in `src/app/agents.rs`, `ordered_agent_pane_ids` in `src/client/shell/agent_sidebar.rs`). The first 6 agents become slots 1 to 6; the rest count toward `overflow`.
 
-1. Walk workspaces in the snapshot's workspace order.
-2. Within each workspace, walk tabs in tab order.
-3. Within each tab, walk panes in the tab layout's leaf order (the snapshot's layout tree, depth first).
-4. Keep panes that host an agent record. The first 6 become slots 1 to 6; the rest count toward `overflow`.
+The focused slot is the agent whose pane matches the snapshot's focused pane id, or none when the focus is a plain shell.
 
-The focused slot is the agent whose pane matches the snapshot's focused pane id, or none when the focus is a plain shell. Milestone 2 verifies this order against herdr's sidebar with four agents across two workspaces.
+herdr answers one request per connection and then closes it, so every `ping` and `session.snapshot` dials afresh. Only `events.subscribe` holds a connection open.
 
 ### Serial discovery
 
@@ -346,7 +343,7 @@ One repo holds the daemon, the firmware, and the studio-generated keymap; each m
 tally/
   cmd/tally/            main.go, CLI wiring
   internal/herdr/       socket client, snapshot decoder, subscriptions, method allowlist
-  internal/slots/       sidebar order, slot and focus computation
+  internal/slots/       slot, focus and overflow computation, frames
   internal/device/      discovery, handshake, frame writer
   internal/config/
   firmware/             boot.py, code.py (from the studio), tally_link.py, render.py, oled.py

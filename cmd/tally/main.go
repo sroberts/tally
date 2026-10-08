@@ -1,6 +1,7 @@
 // Command tally drives the MacroPad's Tally status lights.
 //
-// Milestone 1 has one command: frame, which sends a hand-written frame.
+// status reads herdr and shows the slot each agent maps to; frame sends a
+// hand-written frame to the pad.
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 const usage = `usage: tally <command> [arguments]
 
 commands:
+  status [--json] [--slots N]    show herdr's agents in Fleet key order (--json prints the frame)
   frame [--port PATH] '<json>'   send one raw frame to the MacroPad ('-' reads stdin)
 `
 
@@ -27,6 +29,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "status":
+		err = status(os.Args[2:])
 	case "frame":
 		err = frame(os.Args[2:])
 	case "-h", "--help", "help":
