@@ -47,8 +47,8 @@ def test_drive_layer_stays_static_while_live():
 
 
 def test_slot_states_on_focused_key():
-    for code, want in [("G", GREEN), ("R", scale(WHITE, 0.08)),
-                       ("U", scale(WHITE, 0.03)), (None, OFF)]:
+    for code, want in [("G", GREEN), ("R", scale(WHITE, 0.25)),
+                       ("U", scale(WHITE, 0.10)), (None, OFF)]:
         f = frame(slots=[code] + [None] * 5, focus=1)
         assert render.render(FLEET, f, LIVE, set(), 0)[0] == want, code
 

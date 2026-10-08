@@ -58,11 +58,11 @@ Tally adds no state of its own: each slot shows herdr's effective agent status, 
 | `N` | `blocked` | Waiting on you: a permission prompt, a question, or an MCP elicitation | Amber, 1 Hz blink, full brightness |
 | `G` | `done` | Finished a turn you have not looked at yet | Green, solid |
 | `W` | `working` | Processing a turn | Blue, 2 s breathe between 15% and 35% |
-| `R` | `idle` | Waiting for a prompt; you have seen the result | White, solid, 8% |
-| `U` | `unknown` | herdr cannot classify the pane yet | White, solid, 3% |
+| `R` | `idle` | Waiting for a prompt; you have seen the result | White, solid, 25% |
+| `U` | `unknown` | herdr cannot classify the pane yet | White, solid, 10% |
 | (none) | no agent | No agent in that slot | Off |
 
-The focused agent's key renders at full scale; other keys render at 60% of the listed brightness. When signals compete for the OLED summary, `N` beats `G` beats `W`.
+The focused agent's key renders at full scale; other keys render at 60% of the listed brightness. Percentages scale the full-brightness color before the pad's global brightness (0.3) applies, so anything much under 25% is hard to see; `R` and `U` were raised from 8% and 3% after the first hardware test, where idle keys looked off. When signals compete for the OLED summary, `N` beats `G` beats `W`.
 
 ### Where the transitions come from
 

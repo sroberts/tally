@@ -48,9 +48,9 @@ def slot_color(code, now):
     if code == "W":
         return scale(BLUE, breathe(now))
     if code == "R":
-        return scale(WHITE, 0.08)
+        return scale(WHITE, 0.25)
     if code == "U":
-        return scale(WHITE, 0.03)
+        return scale(WHITE, 0.10)
     return OFF
 
 
