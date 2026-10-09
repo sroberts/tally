@@ -307,7 +307,7 @@ A5 WAITING 3m  DONE 4
 1. Layer, focused slot (`+` when beyond the slots), the focused agent's space name, link indicator (`*` live, `x` stale, `h` herdr offline).
 2. Focused state in words (`READY`, `WORKING`, `NEEDS APPROVAL` with how long, `DONE`, `UNKNOWN`), `NO AGENT FOCUSED`, or `TALLY OFFLINE`, `HERDR OFFLINE`, `UPDATE FW`.
 3. Other agents waiting on you, longest first, with how long (`A5 WAITING 3m`, or `WAIT A3 4m A1 1m`); blocked agents beyond the slots (`+1 WAIT`); slots done but unseen (`DONE 4`). Whole items that do not fit are dropped.
-4. Every slot at a glance by state code, `-` when empty, then the count beyond the slots.
+4. Every slot at a glance: slot number then state code (the state table's `N`, `G`, `W`, `R`, `U`), `-` when empty, then `+N` for agents beyond the slots. So `5N` means A5 needs you and `6G` means A6 finished unseen.
 
 Wait times are measured on the pad from the first frame that shows a slot blocked, so they restart if the pad reloads, and they follow slot positions. Until Tally sends its first frame the OLED keeps the studio's label grid. The text is rebuilt only when the frame, link status or layer changes, or once a second for the timers, and each line redraws only when its text changes.
 
