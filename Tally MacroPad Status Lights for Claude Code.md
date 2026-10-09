@@ -86,7 +86,7 @@ herdr integration install claude
 herdr integration status
 ```
 
-`tally doctor` checks the integration status, that `ui.agent_panel_sort` is `spaces`, and that no Agents view is active.
+`tally doctor` checks the integration status and that `ui.agent_panel_sort` is `spaces`. It cannot check for an active Agents view: herdr only sets or clears one (`agent.view.set`, `agent.view.clear`), both writes, so doctor says so instead.
 
 **Socket**
 
@@ -172,14 +172,17 @@ log_level    = "info"
 | --- | --- |
 | `tally serve` | Run the daemon (launchd calls this). |
 | `tally status` | Pretty-print `/v1/state`: slot grid, herdr statuses, device link. |
-| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, no active Agents view, device handshake. |
+| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, the LaunchAgent, and the pad (handshake, or port held by the agent). |
+| `tally install-agent`, `tally uninstall-agent` | Install or remove the LaunchAgent. |
 | `tally simulate <scenario>` | Send scripted frames (`all-states`, `blocked-unfocused`, `offline`) straight to the device, no herdr needed. |
 | `tally frame '<json>'` | Send one raw frame to the device. |
 
 ### Packaging and service
 
 - Build: `go build -o ~/.local/bin/tally ./cmd/tally`, or `go install`.
-- Service: `tally install-agent` writes `~/Library/LaunchAgents/local.tally.plist` with `RunAtLoad` and `KeepAlive`, then loads it with `launchctl bootstrap gui/$(id -u)`. `tally uninstall-agent` reverses it.
+- Service: `tally install-agent [--port PATH] [--slots N]` writes `~/Library/LaunchAgents/local.tally.plist` (`RunAtLoad`, `KeepAlive`, `ProcessType` Interactive, the running binary's resolved path, and `HERDR_SOCKET_PATH`/`HERDR_SESSION` from the installing shell), boots out any loaded copy, loads it with `launchctl bootstrap gui/$(id -u)`, then `launchctl kickstart`s it. `tally uninstall-agent` boots it out and removes the plist.
+- Kickstart is needed: on this macOS, launchd held a fresh bootstrap at `pended nondemand spawn = speculative` (never started) and, after the daemon was killed, held the `KeepAlive` restart at `inefficient` for minutes, on AC power, for any job (`/bin/sleep` too). So `KeepAlive` cannot be counted on, and `tally doctor` reports a held-back start with the `launchctl kickstart` command that clears it. The daemon itself never exits on herdr or device errors, so a restart is needed only after a crash or a kill. Whether `RunAtLoad` starts it at login is still to be confirmed.
+- Logs: stdout and stderr go to `~/Library/Logs/tally.log` (no rotation; a line per frame change).
 - macOS grants USB serial access to the logged-in user, so no driver, entitlement, or root step is needed.
 
 ## Serial protocol
@@ -324,7 +327,7 @@ Tally only reads herdr's socket and never writes to it, so the worst a Tally bug
 - **Data minimization.** The snapshot decoder keeps ids, order, focus, `agent_status`, and each space's name (shown on the OLED, and in the daemon's frame log). It drops tab and pane titles, `cwd`, `tokens`, `agent_session`, and every other field before they reach memory or logs.
 - **Loopback only.** The HTTP endpoint binds `127.0.0.1:47823` and serves read-only JSON. A local process can read slot states; it cannot change anything.
 - **No serial command surface.** The firmware accepts `state` and `ping` only. Nothing received over serial can trigger HID output.
-- **Logs.** The unified log, event names and slot changes only, via `log show --predicate 'process == "tally"'`.
+- **Logs.** `~/Library/Logs/tally.log`: start, device connect and disconnect, herdr offline and back, subscription errors, and each new frame (state codes and the focused space's name). No pane or tab title, cwd, or terminal output.
 
 ### Failure modes
 
@@ -387,7 +390,7 @@ tally/
 2. **herdr reader.** Socket client, snapshot decoder, slot computation, `tally status`. Verifies slot order against the herdr sidebar.
 3. **Live frames.** Subscriptions, debounce, safety poll, recovery paths.
 4. **Drive-layer integration.** `fstate` lighting, cross-agent alert, OLED status lines.
-5. **Packaging.** `tally install-agent`, `tally doctor`; acceptance pass on the Mac.
+5. **Packaging.** `tally install-agent`, `tally doctor`; acceptance pass on the Mac. The HTTP endpoint and the config file are not built; flags cover the configuration so far.
 
 ### Open questions
 

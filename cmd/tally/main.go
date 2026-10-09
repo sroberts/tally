@@ -2,7 +2,7 @@
 //
 // serve keeps the pad's lights in step with herdr; status reads herdr once
 // and shows the slot each agent maps to; frame sends a hand-written frame to
-// the pad.
+// the pad; install-agent runs serve at login; doctor checks the setup.
 package main
 
 import (
@@ -22,6 +22,10 @@ commands:
   serve [--port PATH] [--slots N]  keep the MacroPad's lights in step with herdr
   status [--json] [--slots N]      show herdr's agents in Fleet key order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
+  install-agent [--port PATH] [--slots N]
+                                   run tally serve at login (a LaunchAgent), and now
+  uninstall-agent                  stop and remove the LaunchAgent
+  doctor                           check herdr, its settings, the LaunchAgent and the pad
 `
 
 func main() {
@@ -37,6 +41,12 @@ func main() {
 		err = status(os.Args[2:])
 	case "frame":
 		err = frame(os.Args[2:])
+	case "install-agent":
+		err = installAgent(os.Args[2:])
+	case "uninstall-agent":
+		err = uninstallAgent(os.Args[2:])
+	case "doctor":
+		err = doctorCmd(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return
