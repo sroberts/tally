@@ -210,6 +210,7 @@ Newline-delimited JSON over the CircuitPython USB CDC data port, protocol versio
 | `fstate` | string or null | State of the focused agent, present even when `focus` is `0`. Drives Drive-layer key lighting. |
 | `overflow` | object | Count by state for agents beyond the slot count. |
 | `herdr` | bool | `false` when the daemon cannot reach herdr's socket. |
+| `space` | string, optional | Name of the focused agent's space (herdr workspace `label`), printable ASCII, at most 10 characters. Omitted when nothing is focused or the name is empty. Older firmware ignores it. |
 
 **`ping`**: `{"t":"ping"}`, sent during discovery. The device answers with `hello`.
 
@@ -294,21 +295,21 @@ Drive lighting needs a live link and herdr; otherwise Drive keeps the studio's s
 
 ### OLED (128 x 64, `terminalio` font, 4 lines of 21 characters)
 
+The keycaps carry the labels, so once Tally is running the OLED shows context instead:
+
 ```
-FLEET          A2  *
-A2 NEEDS APPROVAL
-WAIT 2,5  +1  DONE 4
-A1-6 ATTN NEW RESUME
+FLEET A2 vibe-macro *
+A2 NEEDS APPROVAL 5m
+A5 WAITING 3m  DONE 4
+1W 2N 3- 4G 5N 6-  +1
 ```
 
-1. Layer, focused slot (`+` when beyond the slots), link indicator (`*` live, `x` stale, `h` herdr offline).
-2. Focused state in words: `READY`, `WORKING`, `NEEDS APPROVAL`, `DONE`, `UNKNOWN`; `NO AGENT FOCUSED`, or `TALLY OFFLINE`, `HERDR OFFLINE`, `UPDATE FW`.
-3. Slots waiting on you (`WAIT`), overflow count, and slots done but unseen (`DONE`).
-4. Key hints for the active layer: its labels, A1-A6 collapsed to `A1-6`, as many as fit.
+1. Layer, focused slot (`+` when beyond the slots), the focused agent's space name, link indicator (`*` live, `x` stale, `h` herdr offline).
+2. Focused state in words (`READY`, `WORKING`, `NEEDS APPROVAL` with how long, `DONE`, `UNKNOWN`), `NO AGENT FOCUSED`, or `TALLY OFFLINE`, `HERDR OFFLINE`, `UPDATE FW`.
+3. Other agents waiting on you, longest first, with how long (`A5 WAITING 3m`, or `WAIT A3 4m A1 1m`); blocked agents beyond the slots (`+1 WAIT`); slots done but unseen (`DONE 4`). Whole items that do not fit are dropped.
+4. Every slot at a glance by state code, `-` when empty, then the count beyond the slots.
 
-Until Tally sends its first frame the OLED keeps the studio's label grid. The text redraws only when the frame, link status or layer changes.
-
-Line 3 is the at-a-glance answer when the pad sits in Drive layer and the Fleet colors are not visible.
+Wait times are measured on the pad from the first frame that shows a slot blocked, so they restart if the pad reloads, and they follow slot positions. Until Tally sends its first frame the OLED keeps the studio's label grid. The text is rebuilt only when the frame, link status or layer changes, or once a second for the timers, and each line redraws only when its text changes.
 
 ## Security, privacy, failure modes
 
@@ -317,7 +318,7 @@ Tally only reads herdr's socket and never writes to it, so the worst a Tally bug
 ### Security and privacy
 
 - **Read-only herdr access.** Tally calls `ping`, `session.snapshot`, and `events.subscribe` only. It never calls `pane.send_*`, `agent.prompt`, `agent.focus`, or any write method. Code review enforces this with a method allowlist in `internal/herdr`.
-- **Data minimization.** The snapshot decoder keeps ids, order, focus, and `agent_status`. It drops `terminal_title`, `cwd`, `tokens`, `agent_session`, and every other field before they reach memory or logs.
+- **Data minimization.** The snapshot decoder keeps ids, order, focus, `agent_status`, and each space's name (shown on the OLED, and in the daemon's frame log). It drops tab and pane titles, `cwd`, `tokens`, `agent_session`, and every other field before they reach memory or logs.
 - **Loopback only.** The HTTP endpoint binds `127.0.0.1:47823` and serves read-only JSON. A local process can read slot states; it cannot change anything.
 - **No serial command surface.** The firmware accepts `state` and `ping` only. Nothing received over serial can trigger HID output.
 - **Logs.** The unified log, event names and slot changes only, via `log show --predicate 'process == "tally"'`.
