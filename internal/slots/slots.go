@@ -35,11 +35,16 @@ type State struct {
 	Overflow []Slot  // agents beyond the slot count, in order
 	Focus    *int    // 1-based slot; 0 beyond the slots; nil when the focus is not an agent
 	FState   *string // focused agent's code, even beyond the slots
+	Space    string  // name of the focused agent's space; "" when none
 }
 
 // Compute maps a snapshot onto n slots.
 func Compute(s *herdr.Snapshot, n int) State {
 	st := State{Slots: make([]*Slot, n)}
+	labels := make(map[string]string, len(s.Workspaces))
+	for _, w := range s.Workspaces {
+		labels[w.ID] = w.Label
+	}
 	for i, a := range s.Agents {
 		slot := Slot{Agent: a, Code: code(a.Status)}
 		if i < n {
@@ -54,6 +59,7 @@ func Compute(s *herdr.Snapshot, n int) State {
 			}
 			st.Focus = &focus
 			st.FState = &slot.Code
+			st.Space = labels[a.WorkspaceID]
 		}
 	}
 	return st

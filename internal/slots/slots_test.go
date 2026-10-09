@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sroberts/vibe-macropad/internal/herdr"
@@ -122,7 +123,7 @@ func TestLiveSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(Compute(&resp.Result.Snapshot, DefaultSlots).Frame(1).JSON())
-	want := `{"t":"state","v":2,"seq":1,"slots":["R","G","R","R","R","G"],"focus":0,"fstate":"W","overflow":{"W":1},"herdr":true}`
+	want := `{"t":"state","v":2,"seq":1,"slots":["R","G","R","R","R","G"],"focus":0,"fstate":"W","overflow":{"W":1},"herdr":true,"space":"space-labe"}`
 	if got != want {
 		t.Errorf("frame = %s\nwant    %s", got, want)
 	}
@@ -136,5 +137,26 @@ func TestFrameFitsOnOneDeviceLine(t *testing.T) {
 	f := Compute(snap("pA", ws...), DefaultSlots).Frame(4294967295)
 	if n := len(f.JSON()) + 1; n > 512 {
 		t.Errorf("frame is %d bytes with its newline", n)
+	}
+}
+
+func TestFrameCarriesTheFocusedSpaceName(t *testing.T) {
+	s := snap("w1:p1", [][]string{{"w1:p1=idle"}})
+	for _, tt := range []struct{ label, want string }{
+		{"vibe", "vibe"},
+		{"vibe-macropad", "vibe-macro"}, // SpaceMax characters
+		{"café ☕ bar", "caf? ? bar"},    // the OLED font is ASCII only
+		{"", ""},
+	} {
+		s.Workspaces[0].Label = tt.label
+		f := Compute(s, DefaultSlots).Frame(1)
+		if f.Space != tt.want {
+			t.Errorf("label %q: space = %q, want %q", tt.label, f.Space, tt.want)
+		}
+	}
+	s.FocusedPaneID = nil
+	s.Workspaces[0].Label = "vibe"
+	if f := Compute(s, DefaultSlots).Frame(1); f.Space != "" || strings.Contains(string(f.JSON()), "space") {
+		t.Errorf("no focus: frame = %s", f.JSON())
 	}
 }
