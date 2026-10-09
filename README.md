@@ -17,8 +17,8 @@ Tally lights the FLEET keys with each herdr agent's state: amber blinking when a
 
 ```bash
 go build -o ~/.local/bin/tally ./cmd/tally
+tally serve                          # keep the pad's lights and OLED in step with herdr
 tally status                         # herdr's agents in FLEET key order
-tally status --json | tally frame -  # light the pad from live herdr state
 ```
 
 ### Reading the OLED
