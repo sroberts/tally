@@ -285,10 +285,12 @@ The key numbers in the tables below describe the default layout. `render.py` mat
 | 7 | LOG | White 8% |
 | 8 | COMPACT | White 8% |
 | 9 | ENTER | Green 40% when `fstate` is `R` or `G`, else off |
-| 10 | TALK, holds Right Option | Purple 15%; purple 100% while held. Local only, no host involved |
+| 10 | TALK, holds Right Option | Purple 15%; purple 100% while held, with or without Tally |
 | 11 | BG | Blue 30% when `fstate` is `W`, else off |
 
-**Cross-agent alert (both layers).** When any unfocused slot or overflow count transitions into `N`, the whole pad flashes amber twice (2 x 100 ms on, 100 ms off), then returns to the layer's lighting. The alert is edge-triggered: one flash per transition, never repeating while the state holds. It never fires while TALK is held, so dictation is not interrupted.
+Drive lighting needs a live link and herdr; otherwise Drive keeps the studio's static colors.
+
+**Cross-agent alert (both layers).** When the number of blocked agents (slots plus overflow) rises and the newcomer is not the focused agent, the whole pad flashes amber twice (2 x 100 ms on, 100 ms off), then returns to the layer's lighting. The alert is edge-triggered: one flash per transition, never repeating while the state holds. It never fires while TALK is held, so dictation is not interrupted; pressing TALK cancels a flash in progress. Counting rather than tracking slot positions means a reorder or a focus change never flashes, and the first frame after a (re)connect sets the baseline without flashing.
 
 ### OLED (128 x 64, `terminalio` font, 4 lines of 21 characters)
 
@@ -299,10 +301,12 @@ WAIT 2,5  +1  DONE 4
 A1-6 ATTN NEW RESUME
 ```
 
-1. Layer, focused slot, link indicator (`*` live, `x` stale, `h` herdr offline).
-2. Focused state in words: `READY`, `WORKING`, `NEEDS APPROVAL`, `DONE`, `UNKNOWN`.
+1. Layer, focused slot (`+` when beyond the slots), link indicator (`*` live, `x` stale, `h` herdr offline).
+2. Focused state in words: `READY`, `WORKING`, `NEEDS APPROVAL`, `DONE`, `UNKNOWN`; `NO AGENT FOCUSED`, or `TALLY OFFLINE`, `HERDR OFFLINE`, `UPDATE FW`.
 3. Slots waiting on you (`WAIT`), overflow count, and slots done but unseen (`DONE`).
-4. Key hints for the active layer.
+4. Key hints for the active layer: its labels, A1-A6 collapsed to `A1-6`, as many as fit.
+
+Until Tally sends its first frame the OLED keeps the studio's label grid. The text redraws only when the frame, link status or layer changes.
 
 Line 3 is the at-a-glance answer when the pad sits in Drive layer and the Fleet colors are not visible.
 

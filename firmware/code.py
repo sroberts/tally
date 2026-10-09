@@ -25,6 +25,7 @@ import time
 import usb_cdc
 from adafruit_macropad import MacroPad
 
+import oled
 import render
 import tally_link
 
@@ -157,28 +158,55 @@ macropad.pixels.brightness = BRIGHTNESS
 
 # ---------------------------------------------------------------- tally
 # Status lights from the Tally daemon over the USB CDC data port (boot.py
-# enables it). Without Tally running, render.py keeps the static colors.
+# enables it). Without Tally running, render.py keeps the static colors and
+# the OLED keeps the label grid.
 PAINT_EVERY = 33  # ms, about 30 fps
 link = tally_link.Link(usb_cdc.data) if usb_cdc.data else None
+alert = render.Alert()
+status_screen = oled.StatusScreen(macropad.display)
+oled_screen = None  # what the OLED shows
+oled_input = None   # what its status lines were built from
 
 
 def ms():
     return time.monotonic_ns() // 1000000
 
 
-def paint(layer, held, now):
+def show_status(index, frame, status):
+    """Tally status lines once Tally has spoken, else the label grid.
+    Rebuilds them only when their inputs change."""
+    global oled_screen, oled_input
+    key = (index, frame, status, link.too_new if link else False)
+    if key == oled_input:
+        return
+    oled_input = key
+    text = oled.lines(LAYERS[index], frame, status, key[3])
+    screen = SCREENS[index]
+    if text is not None:
+        status_screen.update(text)
+        screen = status_screen
+    if screen is not oled_screen:
+        screen.show()
+        oled_screen = screen
+
+
+def paint(index, held, now):
+    layer = LAYERS[index]
     if link:
         frame, status = link.frame, link.status(now)
     else:
         frame, status = None, render.NONE
-    for i, color in enumerate(render.render(layer, frame, status, held, now)):
+    talk = any(layer["keys"][n][0] == "TALK" for n in held)
+    alert.update(frame, status, talk, now)
+    colors = render.render(layer, frame, status, held, now, alert.flashing(now))
+    for i, color in enumerate(colors):
         macropad.pixels[i] = color
     macropad.pixels.show()
+    show_status(index, frame, status)
 
 
 # ---------------------------------------------------------------- main loop
 layer_index = 0
-SCREENS[layer_index].show()
 last_position = macropad.encoder
 held = set()
 next_paint = 0
@@ -216,12 +244,11 @@ while True:
         held.clear()
         layer_index = (layer_index + 1) % len(LAYERS)
         layer = LAYERS[layer_index]
-        SCREENS[layer_index].show()
         next_paint = 0
 
     now = ms()
     if link:
         link.poll(now)
     if now >= next_paint:
-        paint(layer, held, now)
+        paint(layer_index, held, now)
         next_paint = now + PAINT_EVERY

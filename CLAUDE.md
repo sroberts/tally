@@ -16,10 +16,11 @@ Work follows GitHub Flow: branch, PR, merge commit on GitHub. Local hooks block 
 - `keycap_sheet.py`: renders `macropad-keycap-sheet.pdf` (a reference card plus physical keycap inserts) with reportlab. Its `DRIVE`/`FLEET`/`ENCODER` tables are a **separate hand-maintained copy** of the keymap. Keep them in sync with `code.py` when bindings change.
 - `Tally MacroPad Status Lights for Claude Code.md`: the design doc for Tally, which lights the keys with each herdr agent's state. Read it before any Tally work. It defines the serial protocol (v2 newline-delimited JSON, 512-byte cap), the slot ordering rules, the per-layer lighting tables, and the five milestones.
 
-## Tally (milestones 1–2 built: device link, herdr reader)
+## Tally (milestones 1, 2 and 4 built: device link, herdr reader, Drive layer and OLED; 3 is PR #4)
 
 - `firmware/tally_link.py` reads frames from the USB CDC data port without blocking, answers `ping` with `hello`, and reports link status (`none` before any frame, `live`, `stale` after 15 s).
-- `firmware/render.py` is a pure function from (layer, frame, status, held keys, time) to 12 colors, with no hardware imports so it runs under CPython tests. It matches keys **by OLED label** (`A1`–`A6`, `ATTN`, `ENTER`, ...), not position, so rearranging a layout keeps the lighting right. Without a frame it returns the layout's static colors.
+- `firmware/render.py` is a pure function from (layer, frame, status, held keys, time) to 12 colors, with no hardware imports so it runs under CPython tests. It matches keys **by OLED label** (`A1`–`A6`, `ATTN`, `ENTER`, ...), not position, so rearranging a layout keeps the lighting right. Without a frame it returns the layout's static colors. On DRIVE it lights keys by the focused agent's `fstate` only while live, else static. Held TALK shows full purple. `render.Alert` is the cross-agent alert: it flashes when the count of blocked agents rises, not counting the focused one, and never while TALK is held.
+- `firmware/oled.py`: `lines()` is pure (4 status lines, or `None` to keep the label grid before Tally's first frame); `StatusScreen` imports displayio only when built.
 - `code.py` (and the studio's `generate()` template, which must stay identical from the `display` section down) polls the link and repaints about every 33 ms after handling keys.
 - Times are integer milliseconds from `time.monotonic_ns()`: CircuitPython floats lose precision as uptime grows.
 - `internal/herdr` is a read-only socket client: an allowlist refuses any method but `ping`, `session.snapshot` and `events.subscribe`, and the snapshot structs declare only ids, order, focus and status, so titles and cwds are dropped while decoding. herdr answers **one request per connection**, so each call dials afresh.
@@ -50,7 +51,7 @@ In this sandbox git can't read `~/.gitconfig`; prefix git (and `go build`, which
 
 `keycap_sheet.py` needs the DejaVu fonts. It searches the Linux path and then `~/Library/Fonts` and `/Library/Fonts`; on macOS, install them with `brew install --cask font-dejavu`.
 
-Deploy firmware by copying `firmware/*.py` to the root of the `CIRCUITPY` drive; `code.py` imports `render` and `tally_link`, so all three must be there. The pad reloads on save. Install the library with `circup install adafruit_macropad`.
+Deploy firmware by copying `firmware/*.py` to the root of the `CIRCUITPY` drive; `code.py` imports `render`, `oled` and `tally_link`, so all four (`code.py`, `render.py`, `oled.py`, `tally_link.py`) must be there. The pad reloads on save. Install the library with `circup install adafruit_macropad`.
 
 ## Firmware constraints
 

@@ -41,9 +41,23 @@ def test_no_frame_keeps_static_colors():
     assert render.render(DRIVE, None, NONE, set(), 0) == static(DRIVE)
 
 
-def test_drive_layer_stays_static_while_live():
-    f = frame(slots=["N"] * 6, fstate="N")
-    assert render.render(DRIVE, f, LIVE, set(), BLINK_ON) == static(DRIVE)
+def test_drive_layer_follows_the_focused_agent():
+    quiet = [scale((1, 1, 1), 0.10), scale((2, 2, 2), 0.10)]  # MODE, REWIND: base x 10%
+    white8, talk = scale(WHITE, 0.08), scale(render.PURPLE, 0.15)
+    esc, enter, bg = scale(render.RED, 0.30), scale(GREEN, 0.40), scale(BLUE, 0.30)
+    rows = {
+        #       ESC  YES/ALWAYS/NO          ENTER  BG
+        "N": [esc, [AMBER] * 3,             OFF,   OFF],
+        "W": [esc, [OFF] * 3,               OFF,   bg],
+        "G": [OFF, [OFF] * 3,               enter, OFF],
+        "R": [OFF, [OFF] * 3,               enter, OFF],
+        "U": [OFF, [OFF] * 3,               OFF,   OFF],
+        None: [OFF, [OFF] * 3,              OFF,   OFF],
+    }
+    for fstate, (e, approve, ent, b) in rows.items():
+        want = [e] + quiet + approve + [white8] * 3 + [ent, talk, b]
+        got = render.render(DRIVE, frame(fstate=fstate), LIVE, set(), BLINK_ON)
+        assert got == want, fstate
 
 
 def test_slot_states_on_focused_key():
@@ -120,7 +134,8 @@ def test_herdr_offline_dims_fleet_to_10_percent():
 
 
 def test_held_keys_show_press_on_every_layer():
-    assert render.render(DRIVE, None, NONE, {10}, 0)[10] == PRESS
+    assert render.render(DRIVE, None, NONE, {9}, 0)[9] == PRESS
+    assert render.render(DRIVE, None, NONE, {10}, 0)[10] == render.PURPLE  # TALK
     assert render.render(FLEET, frame(slots=["N"] * 6), LIVE, {0, 5}, BLINK_OFF)[0] == PRESS
 
 
@@ -129,3 +144,80 @@ def test_bad_frame_fields_do_not_crash():
     out = render.render(FLEET, f, LIVE, set(), 0)
     assert len(out) == 12
     assert render.render(FLEET, frame(slots=["N"]), LIVE, set(), 0)[5] == scale(OFF, 0.6)
+
+
+def test_approval_keys_blink_when_focused_agent_waits():
+    f = frame(fstate="N")
+    assert render.render(DRIVE, f, LIVE, set(), BLINK_ON)[3:6] == [AMBER] * 3
+    assert render.render(DRIVE, f, LIVE, set(), BLINK_OFF)[3:6] == [OFF] * 3
+
+
+def test_drive_falls_back_to_static_colors_unless_live():
+    f = frame(fstate="N")
+    assert render.render(DRIVE, f, STALE, set(), BLINK_ON) == static(DRIVE)
+    assert render.render(DRIVE, frame(fstate="N", herdr=False), LIVE, set(), BLINK_ON) == static(DRIVE)
+
+
+def test_held_talk_is_purple_while_live():
+    assert render.render(DRIVE, frame(fstate="W"), LIVE, {10}, 0)[10] == render.PURPLE
+
+
+def test_flash_turns_every_key_amber_on_both_layers():
+    for layer in (DRIVE, FLEET):
+        assert render.render(layer, frame(fstate="W"), LIVE, set(), 0, flash=True) == [AMBER] * 12
+    assert render.render(DRIVE, frame(), LIVE, {0}, 0, flash=True)[0] == PRESS
+
+
+def alert_after(*frames, talk=False):
+    """Feed frames to a fresh Alert 1 s apart; return it and the last time."""
+    a, now = render.Alert(), 0
+    for f in frames:
+        now += 1000
+        a.update(f, LIVE, talk, now)
+    return a, now
+
+
+def test_alert_flashes_twice_when_another_agent_starts_waiting():
+    a, t = alert_after(frame(slots=["W", "R"], focus=1, fstate="W"),
+                       frame(slots=["W", "N"], focus=1, fstate="W"))
+    assert [a.flashing(t + ms) for ms in (0, 99, 100, 199, 200, 300)] == [True, True, False, False, True, False]
+    assert not a.flashing(t + 400)
+    assert not a.flashing(t + 1000)
+
+
+def test_alert_counts_overflow():
+    a, t = alert_after(frame(overflow={"R": 1}), frame(overflow={"N": 1}))
+    assert a.flashing(t)
+
+
+def test_alert_is_edge_triggered():
+    waiting = frame(slots=["N", "R"], focus=2, fstate="R")
+    a, t = alert_after(frame(slots=["R", "R"]), waiting)
+    assert a.flashing(t)
+    a.update(dict(waiting), LIVE, False, t + 5000)  # heartbeat, same state
+    assert not a.flashing(t + 5000)
+
+
+def test_alert_ignores_the_focused_agent():
+    a, t = alert_after(frame(slots=["W"], focus=1, fstate="W"),
+                       frame(slots=["N"], focus=1, fstate="N"))
+    assert not a.flashing(t)
+
+
+def test_alert_ignores_focus_moving_off_a_waiting_agent():
+    a, t = alert_after(frame(slots=["N", "R"], focus=1, fstate="N"),
+                       frame(slots=["N", "R"], focus=2, fstate="R"))
+    assert not a.flashing(t)
+
+
+def test_alert_ignores_the_first_frame():
+    a, t = alert_after(frame(slots=["N"] * 6))
+    assert not a.flashing(t)
+
+
+def test_alert_never_fires_while_talk_is_held():
+    a, t = alert_after(frame(), frame(slots=["N"]), talk=True)
+    assert not a.flashing(t)
+    a, t = alert_after(frame(), frame(slots=["N"]))
+    a.update(a.frame, LIVE, True, t + 50)  # TALK pressed mid-flash
+    assert not a.flashing(t + 200)
