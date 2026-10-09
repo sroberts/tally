@@ -15,12 +15,16 @@ def frame(**kw):
 
 
 def test_design_doc_example():
-    f = frame(slots=["W", "N", None, "G", "N", None], focus=2, fstate="N", overflow={"R": 1})
-    assert oled.lines(FLEET, f, LIVE) == [
-        "FLEET           A2  *",
-        "A2 NEEDS APPROVAL",
-        "WAIT 2,5  +1  DONE 4",
-        "A1-6 ATTN NEW RESUME",
+    f = frame(slots=["W", "N", None, "G", "N", None], focus=2, fstate="N",
+              overflow={"R": 1}, space="vibe-macro")
+    waits = oled.Waits()
+    waits.update({"slots": ["W", "N", None, "G", "R", None]}, 0)
+    waits.update(f, 120000)
+    assert oled.lines(FLEET, f, LIVE, waits=waits, now=300000) == [
+        "FLEET A2 vibe-macro *",
+        "A2 NEEDS APPROVAL 5m",
+        "A5 WAITING 3m  DONE 4",
+        "1W 2N 3- 4G 5N 6-  +1",
     ]
 
 
@@ -38,8 +42,10 @@ def test_state_words():
 
 
 def test_focus_beyond_the_slots_and_on_a_shell():
-    beyond = oled.lines(DRIVE, frame(focus=0, fstate="W", overflow={"W": 1}), LIVE)
-    assert beyond[0].endswith("+  *") and beyond[1] == "+ WORKING" and beyond[2] == "+1"
+    beyond = oled.lines(DRIVE, frame(focus=0, fstate="N", overflow={"N": 2}), LIVE)
+    assert beyond[0].startswith("DRIVE +  ") and beyond[1] == "+ NEEDS APPROVAL"
+    assert beyond[2] == "+1 WAIT"  # the focused one is on line 2
+    assert beyond[3].endswith("  +2")
     assert oled.lines(DRIVE, frame(), LIVE)[1] == "NO AGENT FOCUSED"
 
 
@@ -57,11 +63,45 @@ def test_no_tally_keeps_the_label_grid():
     assert oled.lines(FLEET, None, NONE) is None
 
 
-def test_hints():
-    assert oled.hints([k[0] for k in DRIVE["keys"]]) == "ESC MODE REWIND YES"
-    assert oled.hints(["ZOOM", "A1", "A2"]) == "ZOOM A1-6"
+def test_space_name_shows_only_while_live():
+    f = frame(focus=1, fstate="R", slots=["R"], space="vibe")
+    assert oled.lines(DRIVE, f, LIVE)[0] == "DRIVE A1 vibe       *"
+    assert "vibe" not in oled.lines(DRIVE, f, STALE)[0]
+    assert oled.lines(DRIVE, dict(f, space="a-very-long-space"), LIVE)[0] == "DRIVE A1 a-very-lon *"
 
 
 def test_bad_frame_fields_do_not_crash():
     lines = oled.lines(FLEET, {"t": "state", "v": 2, "slots": "x", "overflow": [1], "focus": "x"}, LIVE)
     assert len(lines) == 4
+
+
+def test_age():
+    assert [oled.age(ms) for ms in (0, 59999, 60000, 3599999, 3600000)] == ["0s", "59s", "1m", "59m", "1h"]
+
+
+def test_waits_keep_their_start_while_blocked():
+    w = oled.Waits()
+    w.update(frame(slots=["N", "R"]), 1000)
+    w.update(frame(slots=["N", "N"]), 5000)
+    assert w.age(1, 65000) == "1m" and w.age(2, 65000) == "1m"  # 64 s and 60 s
+    assert w.age(1, 61000) == "1m" and w.age(2, 61000) == "56s"
+    w.update(frame(slots=["R", "N"]), 70000)
+    assert w.age(1, 70000) == "" and w.start(2) == 5000
+
+
+def test_waiting_list_longest_first_without_the_focused_agent():
+    w = oled.Waits()
+    w.update(frame(slots=[None, None, "N"]), 0)
+    f = frame(slots=["N", None, "N", "N"], focus=4, fstate="N")
+    w.update(f, 30000)
+    assert oled.lines(DRIVE, f, LIVE, waits=w, now=90000)[2] == "WAIT A3 1m A1 1m"
+
+
+def test_waiting_without_timers():
+    f = frame(slots=["N", "G", "G"], focus=3, fstate="G")
+    assert oled.lines(DRIVE, f, LIVE)[2] == "A1 WAITING  DONE 2"
+
+
+def test_slot_strip():
+    assert oled.strip(frame(slots=["W", None, "U", "R", "G", "N"])) == "1W 2- 3U 4R 5G 6N"
+    assert oled.strip(frame(overflow={"R": 2, "N": 1})) == "1- 2- 3- 4- 5- 6-  +3"

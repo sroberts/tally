@@ -1,10 +1,10 @@
 package herdr
 
 // Snapshot is the part of herdr's session.snapshot that Tally keeps: ids,
-// order, focus, and agent status. Workspaces and tabs are kept only so
-// tally status can say where each agent lives. The structs declare no other
-// fields, so pane titles, cwds, tokens and agent sessions are dropped while
-// decoding and never reach memory or logs.
+// order, focus, agent status, and each space's name (for the pad's OLED).
+// The structs declare no other fields, so tab and pane titles, cwds, tokens
+// and agent sessions are dropped while decoding and never reach memory or
+// logs.
 type Snapshot struct {
 	FocusedPaneID *string     `json:"focused_pane_id"`
 	Workspaces    []Workspace `json:"workspaces"`
@@ -16,6 +16,7 @@ type Snapshot struct {
 type Workspace struct {
 	ID     string `json:"workspace_id"`
 	Number int    `json:"number"`
+	Label  string `json:"label"` // the space's name in herdr's sidebar
 }
 
 // Tab is one tab within a workspace.

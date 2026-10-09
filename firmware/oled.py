@@ -15,43 +15,120 @@ def _slot(focus):
     return ""
 
 
-def _numbers(slots, code):
-    return ",".join(str(i + 1) for i, c in enumerate(slots) if c == code)
+def _slots(frame):
+    slots = frame.get("slots") if frame else None
+    return slots if isinstance(slots, list) else []
 
 
-def hints(labels):
-    """Key hints from a layer's labels: A1..A6 collapse to A1-6, then as
-    many labels as fit."""
-    words, slots = [], 0
-    for label in labels:
-        if label in SLOT_LABELS:
-            slots += 1
-            if slots > 1:
-                continue
-            label = "A1-6"
-        if len(" ".join(words + [label])) > WIDTH:
+def _overflow(frame, code=None):
+    overflow = frame.get("overflow")
+    if not isinstance(overflow, dict):
+        return 0
+    return sum(n for c, n in overflow.items() if isinstance(n, int) and (code is None or c == code))
+
+
+def age(ms):
+    """45s, 3m, 2h."""
+    s = ms // 1000
+    if s < 60:
+        return str(s) + "s"
+    if s < 3600:
+        return str(s // 60) + "m"
+    return str(s // 3600) + "h"
+
+
+class Waits:
+    """When each slot started waiting on you, as first seen by the pad.
+    Call update() with every frame; a slot keeps its start time for as long
+    as it stays blocked."""
+
+    def __init__(self):
+        self.frame = None
+        self.since = []  # per slot: ms, or None when not blocked
+
+    def update(self, frame, now):
+        if frame is self.frame:
+            return
+        self.frame = frame
+        since = []
+        for i, code in enumerate(_slots(frame)):
+            was = self.since[i] if i < len(self.since) else None
+            since.append((now if was is None else was) if code == "N" else None)
+        self.since = since
+
+    def start(self, slot, default=None):
+        """When slot (1-based) started waiting, or default."""
+        if 1 <= slot <= len(self.since) and self.since[slot - 1] is not None:
+            return self.since[slot - 1]
+        return default
+
+    def age(self, slot, now):
+        """How long slot (1-based) has waited, as text, or ""."""
+        start = self.start(slot)
+        return "" if start is None else age(now - start)
+
+
+def _fit(parts, sep="  "):
+    """Join as many whole parts as fit on a line."""
+    out = ""
+    for part in parts:
+        line = out + sep + part if out else part
+        if len(line) > WIDTH:
             break
-        words.append(label)
-    return " ".join(words)
+        out = line
+    return out
 
 
-def lines(layer, frame, status, too_new=False):
+def strip(frame):
+    """Every slot at a glance: 1W 2N 3- ... and +N beyond the slots."""
+    cells = [str(i + 1) + (c if isinstance(c, str) else "-") for i, c in enumerate(_slots(frame))]
+    extra = _overflow(frame)
+    return _fit([" ".join(cells)] + (["+" + str(extra)] if extra else []))
+
+
+def _waiting(frame, waits, now):
+    """Agents waiting on you other than the focused one, longest first."""
+    focus = frame.get("focus")
+    blocked = [i + 1 for i, c in enumerate(_slots(frame)) if c == "N" and i + 1 != focus]
+    if waits:
+        blocked.sort(key=lambda n: waits.start(n, now))
+    named = [(SLOT_LABELS[n - 1] if n <= len(SLOT_LABELS) else str(n),
+              waits.age(n, now) if waits else "") for n in blocked]
+    parts = []
+    if len(named) == 1:
+        parts.append((named[0][0] + " WAITING " + named[0][1]).strip())
+    elif named:
+        parts.append(_fit(["WAIT"] + [(n + " " + a).strip() for n, a in named], " "))
+    extra = _overflow(frame, "N") - (1 if focus == 0 and frame.get("fstate") == "N" else 0)
+    if extra > 0:
+        parts.append("+" + str(extra) + " WAIT")
+    done = [str(i + 1) for i, c in enumerate(_slots(frame)) if c == "G" and i + 1 != focus]
+    if done:
+        parts.append("DONE " + ",".join(done))
+    return _fit(parts)
+
+
+def lines(layer, frame, status, too_new=False, waits=None, now=0):
     """The four status lines, or None when Tally has never sent a frame
     (keep the layer's label grid).
 
     layer: a code.py LAYERS entry; frame, status: as for render.render;
-    too_new: the host speaks a newer protocol than this firmware.
+    too_new: the host speaks a newer protocol than this firmware;
+    waits: a Waits updated with frame, for timers; now: milliseconds.
     """
     if status == NONE and not too_new:
         return None
     frame = frame or {}
     herdr = frame.get("herdr") is not False
+    live = status == LIVE and herdr
     focus = frame.get("focus")
-    slot = _slot(focus) if status == LIVE and herdr else ""
+    slot = _slot(focus) if live else ""
+    space = frame.get("space") if live else ""
+    space = space if isinstance(space, str) else ""
     mark = "x" if status != LIVE else ("*" if herdr else "h")
-    head = "{:<15}{:>3}  {}".format(layer["name"][:15], slot, mark)
+    head = "{:<6}{:<3}{:<10} {}".format(layer["name"][:5], slot, space[:10], mark)
 
-    summary = ""
+    summary = slots = ""
     if too_new:
         state = "UPDATE FW"
     elif status == STALE:
@@ -60,22 +137,16 @@ def lines(layer, frame, status, too_new=False):
         state = "HERDR OFFLINE"
     else:
         fstate = frame.get("fstate")
-        state = (slot + " " + WORDS.get(fstate, "UNKNOWN")) if slot else "NO AGENT FOCUSED"
-        slots = frame.get("slots")
-        slots = slots if isinstance(slots, list) else []
-        overflow = frame.get("overflow")
-        extra = sum(n for n in overflow.values() if isinstance(n, int)) if isinstance(overflow, dict) else 0
-        parts = []
-        if "N" in slots:
-            parts.append("WAIT " + _numbers(slots, "N"))
-        if extra:
-            parts.append("+" + str(extra))
-        if "G" in slots:
-            parts.append("DONE " + _numbers(slots, "G"))
-        summary = "  ".join(parts)
+        if slot:
+            state = slot + " " + WORDS.get(fstate, "UNKNOWN")
+            if fstate == "N" and waits and isinstance(focus, int) and focus > 0:
+                state = _fit([state, waits.age(focus, now)], " ")
+        else:
+            state = "NO AGENT FOCUSED"
+        summary = _waiting(frame, waits, now)
+        slots = strip(frame)
 
-    out = [head, state, summary, hints([k[0] for k in layer["keys"]])]
-    return [line[:WIDTH] for line in out]
+    return [line[:WIDTH] for line in (head, state, summary, slots)]
 
 
 class StatusScreen:

@@ -585,6 +585,7 @@ macropad.pixels.brightness = BRIGHTNESS
 PAINT_EVERY = 33  # ms, about 30 fps
 link = tally_link.Link(usb_cdc.data) if usb_cdc.data else None
 alert = render.Alert()
+waits = oled.Waits()
 status_screen = oled.StatusScreen(macropad.display)
 oled_screen = None  # what the OLED shows
 oled_input = None   # what its status lines were built from
@@ -594,15 +595,16 @@ def ms():
     return time.monotonic_ns() // 1000000
 
 
-def show_status(index, frame, status):
+def show_status(index, frame, status, now):
     """Tally status lines once Tally has spoken, else the label grid.
-    Rebuilds them only when their inputs change."""
+    Rebuilds them only when their inputs change, or each second for the
+    waiting timers."""
     global oled_screen, oled_input
-    key = (index, frame, status, link.too_new if link else False)
+    key = (index, frame, status, link.too_new if link else False, now // 1000)
     if key == oled_input:
         return
     oled_input = key
-    text = oled.lines(LAYERS[index], frame, status, key[3])
+    text = oled.lines(LAYERS[index], frame, status, key[3], waits, now)
     screen = SCREENS[index]
     if text is not None:
         status_screen.update(text)
@@ -620,11 +622,12 @@ def paint(index, held, now):
         frame, status = None, render.NONE
     talk = any(layer["keys"][n][0] == "TALK" for n in held)
     alert.update(frame, status, talk, now)
+    waits.update(frame, now)
     colors = render.render(layer, frame, status, held, now, alert.flashing(now))
     for i, color in enumerate(colors):
         macropad.pixels[i] = color
     macropad.pixels.show()
-    show_status(index, frame, status)
+    show_status(index, frame, status, now)
 
 
 # ---------------------------------------------------------------- main loop
