@@ -96,16 +96,17 @@ herdr serves newline-delimited JSON on a Unix socket. Tally resolves the path th
 
 | Call | Purpose |
 | --- | --- |
-| `ping` | Liveness check at connect and every 5 s. |
+| `ping` | Liveness check in `tally status`. The daemon skips it: a failed snapshot already means herdr is offline. |
 | `session.snapshot` | Authoritative read: ordered workspaces, tabs, panes, layouts, focused pane, and agent records with `agent_status`. Every frame comes from one snapshot. |
-| `events.subscribe`, connection A | Global lifecycle stream: `workspace.*` moves, reorders and closes, `tab.created`, `tab.closed`, `tab.moved`, `pane.created`, `pane.closed`, `pane.moved`, `pane.exited`, `pane.focused`, `pane.agent_detected`, `layout.updated`. |
+| `events.subscribe`, connection A | Global lifecycle stream: `workspace.created`, `.moved`, `.reordered`, `.closed`, `.focused`; `tab.created`, `.closed`, `.moved`, `.focused`; `pane.created`, `.closed`, `.moved`, `.exited`, `.focused`, `.agent_detected`; `layout.updated`. |
 | `events.subscribe`, connection B | `pane.agent_status_changed` for each agent pane. herdr requires a `pane_id` per entry and rejects the whole request if any pane is gone, so Tally rebuilds this connection from the latest snapshot whenever the agent pane set changes. |
 
-Every event is an invalidation signal. The daemon waits 50 ms for more events, then issues one `session.snapshot` and renders from it. It never applies an event payload to its cache, because herdr guarantees no ordering between events and snapshots.
+Every event is an invalidation signal. The daemon waits 50 ms for more events, then issues one `session.snapshot` and renders from it. It never applies an event payload to its cache, because herdr guarantees no ordering between events and snapshots. It never even decodes one: `pane.agent_status_changed` carries the pane title. A subscription's acknowledgement (`subscription_started`) also invalidates, so every (re)subscribe is followed by a fresh snapshot.
 
 **Recovery**
 
-- `events_lost` on either connection: reopen it, wait for `subscription_started`, then take a fresh snapshot.
+- `events_lost` on either connection: reopen it at once, wait for `subscription_started`, then take a fresh snapshot.
+- Any other subscription failure (herdr rejected a gone pane, the connection dropped): invalidate, then retry after 2 s, or sooner for connection B when a new pane set arrives.
 - Socket gone (herdr server stopped): mark every slot empty, show `HERDR OFFLINE` on the OLED, retry every 2 s.
 - A 2 s safety poll takes a snapshot even with no events, which bounds any missed event to 2 s of staleness.
 
@@ -122,10 +123,12 @@ The daemon is a single static Go binary with one goroutine owning all state; eve
 ### Goroutines
 
 1. **Lifecycle subscriber.** Holds herdr connection A and turns every pushed event into an `Invalidate` message.
-2. **Status subscriber.** Holds connection B, subscribed to `pane.agent_status_changed` for the current agent panes. Rebuilds itself when the actor sends a new pane set.
-3. **State actor.** Debounces `Invalidate` for 50 ms, takes a `session.snapshot` on its own short-lived connection, computes slots, and emits a frame when the result differs or the heartbeat fires.
-4. **Serial manager.** Discovers, opens, and reconnects the device; writes frames; reads `hello` lines.
-5. **HTTP server.** Serves `GET /v1/state` and `GET /healthz` on `127.0.0.1:47823` for `tally status` and the PyPortal.
+2. **Status subscriber.** Holds connection B, subscribed to `pane.agent_status_changed` for the current agent panes. Rebuilds itself when the actor sends a new pane set (compared sorted, so a reorder alone keeps the connection).
+3. **State actor.** Debounces `Invalidate` for 50 ms from the first one, takes a `session.snapshot` on its own short-lived connection, computes slots, and emits a frame when the result differs. Invalidations that arrive during a snapshot queue one more refresh.
+4. **Serial manager.** Discovers, opens, and reconnects the device; writes each new frame and resends the current one on the heartbeat and on `hello`; reads `hello` lines. The actor hands it frames through a one-slot mailbox, so a stuck port never stalls the actor.
+5. **HTTP server** (not built yet). Serves `GET /v1/state` and `GET /healthz` on `127.0.0.1:47823` for `tally status` and the PyPortal.
+
+Milestone 3 built 1 to 4 (`internal/daemon`, `device.Link`) and `tally serve` with flags only; the HTTP server and the config file are still to come.
 
 ### Slot computation
 
@@ -146,7 +149,7 @@ herdr answers one request per connection and then closes it, so every `ping` and
 ### Frame emission
 
 - Emit after each snapshot whose slots, focus, or overflow differ from the last frame.
-- Heartbeat: resend the current frame every 5 s even when nothing changed.
+- Heartbeat: the serial manager resends the current frame every 5 s even when nothing changed.
 - On device connect or `hello`, send the current frame immediately.
 
 ### Configuration
@@ -344,7 +347,8 @@ tally/
   cmd/tally/            main.go, CLI wiring
   internal/herdr/       socket client, snapshot decoder, subscriptions, method allowlist
   internal/slots/       slot, focus and overflow computation, frames
-  internal/device/      discovery, handshake, frame writer
+  internal/device/      discovery, handshake, frame writer, reconnecting link
+  internal/daemon/      subscribers and state actor (tally serve)
   internal/config/
   firmware/             boot.py, code.py (from the studio), tally_link.py, render.py, oled.py
   testdata/snapshots/   captured session.snapshot responses (titles and cwds redacted)

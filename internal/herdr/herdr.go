@@ -63,8 +63,27 @@ func New(path string) *Client { return &Client{Path: path} }
 
 // Call sends one request and decodes the response's result into out.
 func (c *Client) Call(method string, params any, out any) error {
+	conn, err := c.send(method, params)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	line, err := bufio.NewReaderSize(conn, 64*1024).ReadBytes('\n')
+	if err != nil {
+		return fmt.Errorf("herdr: reading %s response: %w", method, err)
+	}
+	result, err := decode(method, line)
+	if err != nil || out == nil {
+		return err
+	}
+	return json.Unmarshal(result, out)
+}
+
+// send checks method against the allowlist, dials herdr, and writes one
+// request. The connection's deadline is Timeout from now.
+func (c *Client) send(method string, params any) (net.Conn, error) {
 	if !allowed[method] {
-		return fmt.Errorf("herdr: method %q is not on Tally's read-only allowlist", method)
+		return nil, fmt.Errorf("herdr: method %q is not on Tally's read-only allowlist", method)
 	}
 	if params == nil {
 		params = struct{}{}
@@ -75,36 +94,34 @@ func (c *Client) Call(method string, params any, out any) error {
 		Params any    `json:"params"`
 	}{"tally", method, params})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	conn, err := net.DialTimeout("unix", c.Path, Timeout)
 	if err != nil {
-		return fmt.Errorf("herdr is not reachable at %s: %w", c.Path, err)
+		return nil, fmt.Errorf("herdr is not reachable at %s: %w", c.Path, err)
 	}
-	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(Timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
-		return err
+		conn.Close()
+		return nil, err
 	}
-	line, err := bufio.NewReaderSize(conn, 64*1024).ReadBytes('\n')
-	if err != nil {
-		return fmt.Errorf("herdr: reading %s response: %w", method, err)
-	}
+	return conn, nil
+}
+
+// decode returns a response line's result, or its error as an *Error.
+func decode(method string, line []byte) (json.RawMessage, error) {
 	var resp struct {
 		Result json.RawMessage `json:"result"`
 		Error  *Error          `json:"error"`
 	}
 	if err := json.Unmarshal(line, &resp); err != nil {
-		return fmt.Errorf("herdr: bad %s response: %w", method, err)
+		return nil, fmt.Errorf("herdr: bad %s response: %w", method, err)
 	}
 	if resp.Error != nil {
-		return resp.Error
+		return nil, resp.Error
 	}
-	if out == nil {
-		return nil
-	}
-	return json.Unmarshal(resp.Result, out)
+	return resp.Result, nil
 }
 
 // Ping checks that herdr answers.
