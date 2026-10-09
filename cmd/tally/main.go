@@ -1,7 +1,8 @@
 // Command tally drives the MacroPad's Tally status lights.
 //
-// status reads herdr and shows the slot each agent maps to; frame sends a
-// hand-written frame to the pad.
+// serve keeps the pad's lights in step with herdr; status reads herdr once
+// and shows the slot each agent maps to; frame sends a hand-written frame to
+// the pad.
 package main
 
 import (
@@ -18,8 +19,9 @@ import (
 const usage = `usage: tally <command> [arguments]
 
 commands:
-  status [--json] [--slots N]    show herdr's agents in Fleet key order (--json prints the frame)
-  frame [--port PATH] '<json>'   send one raw frame to the MacroPad ('-' reads stdin)
+  serve [--port PATH] [--slots N]  keep the MacroPad's lights in step with herdr
+  status [--json] [--slots N]      show herdr's agents in Fleet key order (--json prints the frame)
+  frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
 `
 
 func main() {
@@ -29,6 +31,8 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "serve":
+		err = serve(os.Args[2:])
 	case "status":
 		err = status(os.Args[2:])
 	case "frame":
