@@ -21,6 +21,7 @@ func serve(args []string) error {
 	portPath := fs.String("port", "", "serial port to use instead of discovery (skips the handshake)")
 	cfg := daemon.Defaults()
 	fs.IntVar(&cfg.Slots, "slots", cfg.Slots, "number of Fleet slot keys")
+	verbose := fs.Bool("verbose", false, "also log every frame sent to the pad")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -28,7 +29,11 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	level := slog.LevelInfo
+	if *verbose {
+		level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	log.Info("tally serve", "herdr", path, "slots", cfg.Slots)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

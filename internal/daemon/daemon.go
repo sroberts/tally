@@ -122,7 +122,7 @@ func (d *Daemon) actor(ctx context.Context) {
 			last = key
 			seq++
 			f.Seq = seq
-			d.log.Info("frame", "frame", string(bytes.TrimSpace(f.JSON())))
+			d.log.Debug("frame", "frame", string(bytes.TrimSpace(f.JSON())))
 			d.emit(f)
 		}
 		poll.Reset(d.cfg.SafetyPoll)

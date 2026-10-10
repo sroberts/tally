@@ -182,7 +182,7 @@ log_level    = "info"
 - Build: `go build -o ~/.local/bin/tally ./cmd/tally`, or `go install`.
 - Service: `tally install-agent [--port PATH] [--slots N]` writes `~/Library/LaunchAgents/local.tally.plist` (`RunAtLoad`, `KeepAlive`, `ProcessType` Interactive, the running binary's resolved path, and `HERDR_SOCKET_PATH`/`HERDR_SESSION` from the installing shell), boots out any loaded copy, loads it with `launchctl bootstrap gui/$(id -u)`, then `launchctl kickstart`s it. `tally uninstall-agent` boots it out and removes the plist.
 - Kickstart is needed: on this macOS, launchd held a fresh bootstrap at `pended nondemand spawn = speculative` (never started) and, after the daemon was killed, held the `KeepAlive` restart at `inefficient` for minutes, on AC power, for any job (`/bin/sleep` too). So `KeepAlive` cannot be counted on, and `tally doctor` reports a held-back start with the `launchctl kickstart` command that clears it. The daemon itself never exits on herdr or device errors, so a restart is needed only after a crash or a kill. Whether `RunAtLoad` starts it at login is still to be confirmed.
-- Logs: stdout and stderr go to `~/Library/Logs/tally.log` (no rotation; a line per frame change).
+- Logs: stdout and stderr go to `~/Library/Logs/tally.log` (no rotation). The daemon logs only events, so the file grows by a few lines a day; `tally serve --verbose` adds a line per frame.
 - macOS grants USB serial access to the logged-in user, so no driver, entitlement, or root step is needed.
 
 ## Serial protocol
@@ -327,7 +327,7 @@ Tally only reads herdr's socket and never writes to it, so the worst a Tally bug
 - **Data minimization.** The snapshot decoder keeps ids, order, focus, `agent_status`, and each space's name (shown on the OLED, and in the daemon's frame log). It drops tab and pane titles, `cwd`, `tokens`, `agent_session`, and every other field before they reach memory or logs.
 - **Loopback only.** The HTTP endpoint binds `127.0.0.1:47823` and serves read-only JSON. A local process can read slot states; it cannot change anything.
 - **No serial command surface.** The firmware accepts `state` and `ping` only. Nothing received over serial can trigger HID output.
-- **Logs.** `~/Library/Logs/tally.log`: start, device connect and disconnect, herdr offline and back, subscription errors, and each new frame (state codes and the focused space's name). No pane or tab title, cwd, or terminal output.
+- **Logs.** `~/Library/Logs/tally.log`: start, device connect and disconnect, herdr offline and back, and subscription errors; with `--verbose`, each new frame too (state codes and the focused space's name). No pane or tab title, cwd, or terminal output.
 
 ### Failure modes
 
