@@ -17,9 +17,12 @@ Tally lights the FLEET keys with each herdr agent's state: amber blinking when a
 
 ```bash
 go build -o ~/.local/bin/tally ./cmd/tally
-tally serve                          # keep the pad's lights and OLED in step with herdr
-tally status                         # herdr's agents in FLEET key order
+tally install-agent   # run tally serve in the background, now and at login
+tally doctor          # check herdr, its settings, the background agent and the pad
+tally status          # herdr's agents in FLEET key order
 ```
+
+`tally serve` runs the daemon in a terminal instead. Its log is `~/Library/Logs/tally.log`; `tally uninstall-agent` removes the background agent.
 
 ### Reading the OLED
 
