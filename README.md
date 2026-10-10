@@ -22,7 +22,7 @@ tally doctor          # check herdr, its settings, the background agent and the 
 tally status          # herdr's agents in FLEET key order
 ```
 
-`tally serve` runs the daemon in a terminal instead. Its log is `~/Library/Logs/tally.log`; `tally uninstall-agent` removes the background agent.
+`tally serve` runs the daemon in a terminal instead. Its log is `~/Library/Logs/tally.log`, which records only connects, disconnects and errors (`tally serve --verbose` adds each frame); `tally uninstall-agent` removes the background agent.
 
 ### Reading the OLED
 

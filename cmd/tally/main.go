@@ -19,7 +19,8 @@ import (
 const usage = `usage: tally <command> [arguments]
 
 commands:
-  serve [--port PATH] [--slots N]  keep the MacroPad's lights in step with herdr
+  serve [--port PATH] [--slots N] [--verbose]
+                                   keep the MacroPad's lights in step with herdr
   status [--json] [--slots N]      show herdr's agents in Fleet key order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   install-agent [--port PATH] [--slots N]
