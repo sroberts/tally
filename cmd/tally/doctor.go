@@ -8,10 +8,10 @@ import (
 
 	"go.bug.st/serial"
 
-	"github.com/sroberts/vibe-macropad/internal/device"
-	"github.com/sroberts/vibe-macropad/internal/doctor"
-	"github.com/sroberts/vibe-macropad/internal/herdr"
-	"github.com/sroberts/vibe-macropad/internal/launchd"
+	"github.com/sroberts/tally/internal/device"
+	"github.com/sroberts/tally/internal/doctor"
+	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/launchd"
 )
 
 func doctorCmd(args []string) error {

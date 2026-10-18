@@ -9,7 +9,7 @@
 // simply agents[n-1], and the key that lights is the key that jumps there.
 package slots
 
-import "github.com/sroberts/vibe-macropad/internal/herdr"
+import "github.com/sroberts/tally/internal/herdr"
 
 // DefaultSlots is the number of Fleet keys.
 const DefaultSlots = 6

@@ -13,7 +13,7 @@ import (
 
 	"go.bug.st/serial"
 
-	"github.com/sroberts/vibe-macropad/internal/device"
+	"github.com/sroberts/tally/internal/device"
 )
 
 const usage = `usage: tally <command> [arguments]

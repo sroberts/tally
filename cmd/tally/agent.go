@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sroberts/vibe-macropad/internal/launchd"
-	"github.com/sroberts/vibe-macropad/internal/slots"
+	"github.com/sroberts/tally/internal/launchd"
+	"github.com/sroberts/tally/internal/slots"
 )
 
 func runCmd(name string, args ...string) ([]byte, error) {

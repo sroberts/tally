@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sroberts/vibe-macropad/internal/herdr"
-	"github.com/sroberts/vibe-macropad/internal/slots"
+	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/slots"
 )
 
 var words = map[string]string{

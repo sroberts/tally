@@ -1,4 +1,4 @@
-module github.com/sroberts/vibe-macropad
+module github.com/sroberts/tally
 
 go 1.27.1
 

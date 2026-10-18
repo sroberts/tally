@@ -10,10 +10,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sroberts/vibe-macropad/internal/daemon"
-	"github.com/sroberts/vibe-macropad/internal/device"
-	"github.com/sroberts/vibe-macropad/internal/herdr"
-	"github.com/sroberts/vibe-macropad/internal/slots"
+	"github.com/sroberts/tally/internal/daemon"
+	"github.com/sroberts/tally/internal/device"
+	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/slots"
 )
 
 func serve(args []string) error {

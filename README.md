@@ -1,81 +1,42 @@
-# vibe-macropad
+# tally
 
-A keypad for driving [Claude Code](https://claude.com/claude-code) from an Adafruit MacroPad RP2040, with status lights that show what each agent is doing.
+The host daemon behind the vibepads. It watches [herdr](https://herdr.dev)'s agents and keeps two kinds of client in step with them:
 
-<img src="docs/macropad.jpg" alt="The MacroPad on the DRIVE layer: ESC, MODE, REWIND, YES, ALWAYS, NO, COMPACT, LOG, TAB, ENTER, TALK and BG keys, lit, with the layer's labels on the OLED" width="420">
+- **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, the hardware pad: tally sends state frames over the pad's second USB serial port (protocol v2) and the pad lights its keys. The pad types through USB HID; tally never writes to herdr for it.
+- **[vibepad](https://github.com/sroberts/vibepad)**, the iPhone soft pad: tally serves a pinned-TLS WebSocket (protocol v3), sends the same state, and executes the phone's actions directly against herdr's socket.
 
-The pad is a plain USB keyboard with two layers; press the encoder to switch between them.
-
-- **DRIVE** sends keystrokes straight to Claude Code: ESC, MODE, REWIND, YES, ALWAYS, NO, TAB, LOG, COMPACT, ENTER, TALK (holds Right Option for voice) and BG.
-- **FLEET** drives the herdr terminal multiplexer through its prefix key: A1–A6 jump to agents in herdr's sidebar order, plus ATTN, NEW, RESUME, ZOOM, LAST and ENTER. The encoder turns through agents on this layer and scrolls on DRIVE.
-
-Each keycap carries both labels, DRIVE on top and FLEET below; `macropad-keycap-sheet.pdf` has the printable inserts.
-
-## Setup
-
-You need an Adafruit MacroPad RP2040, macOS for Tally, and [herdr](https://herdr.dev) (`brew install herdr`) for the FLEET layer and the status lights.
-
-1. **Install CircuitPython** (10.x) on the MacroPad, then its library: `circup install adafruit_macropad`.
-2. **Copy the firmware.** Copy every file in `firmware/` (`boot.py`, `code.py`, `render.py`, `oled.py`, `tally_link.py`) to the root of the `CIRCUITPY` drive. Unplug and replug the pad once: `boot.py` turns on the second USB serial port Tally uses, and only runs on a hard reset.
-3. **Configure herdr.** Open `MacroPad Layout Studio.html` in a browser and paste its herdr snippet into `~/.config/herdr/config.toml` (the same block is in the comment header of `firmware/code.py`). `HERDR_PREFIX` in `code.py` must match herdr's `keys.prefix` (the layout uses Ctrl+B).
-4. **Install Tally** (needs Go): see below.
-
-To change the keymap, edit it in the Layout Studio and export a new `code.py`; `uv run --with reportlab python keycap_sheet.py 12 macropad-keycap-sheet.pdf` rebuilds the keycap sheet (it needs the DejaVu fonts).
-
-## Tally
-
-Tally lights the FLEET keys with each herdr agent's state: amber blinking when an agent needs you, green when it finished and you haven't looked, blue breathing while it works, dim white when idle. A Go CLI reads herdr's socket (read-only) and sends frames to the pad over a second USB serial port; the pad only renders them. The design is in [`Tally MacroPad Status Lights for Claude Code.md`](<Tally MacroPad Status Lights for Claude Code.md>).
+Both can run at once off the same state engine.
 
 ```bash
 go build -o ~/.local/bin/tally ./cmd/tally
 tally install-agent   # run tally serve in the background, now and at login
 tally doctor          # check herdr, its settings, the background agent and the pad
-tally status          # herdr's agents in FLEET key order
+tally status          # herdr's agents in slot order
 ```
 
-`tally serve` runs the daemon in a terminal instead. Its log is `~/Library/Logs/tally.log`, which records only connects, disconnects and errors (`tally serve --verbose` adds each frame); `tally uninstall-agent` removes the background agent.
+`tally serve` runs the daemon in a terminal instead. Its log is `~/Library/Logs/tally.log` (connects, disconnects and errors; `--verbose` adds each frame). `tally uninstall-agent` removes the background agent.
 
-### Reading the OLED
+Slot codes, shared by every client:
 
-Once Tally is running, the screen shows context instead of key names (the keycaps have those):
-
-```
-DRIVE A1 vibe-macro *
-A1 WORKING
-A5 WAITING 3m  DONE 4
-1W 2W 3R 4R 5N 6G  +1
-```
-
-1. **Layer, focused agent, its space name, link.** `A1` is the agent you're looking at (`+` when it's beyond the six keys). The last character is the link: `*` live, `x` Tally has stopped sending (`TALLY OFFLINE`), `h` herdr isn't running (`HERDR OFFLINE`).
-2. **What the focused agent is doing**, in words. `NEEDS APPROVAL 5m` says how long it has waited.
-3. **Who else needs you.** Agents waiting on you, longest first, with how long (`A5 WAITING 3m`, or `WAIT A3 4m A1 1m` for several), `+1 WAIT` for waiting agents beyond the six keys, and `DONE 4` for agents that finished while you were elsewhere. Wait times count from when the pad first saw the agent waiting.
-4. **Every slot at a glance.** One entry per FLEET key: the slot number (A1–A6) followed by a state code, then `+N` for agents beyond the six keys.
-
-| Code | Means | Key light |
-| --- | --- | --- |
-| `N` | **Needs you**: a permission prompt or a question is waiting | amber, blinking |
-| `G` | **Done** ("green"): finished a turn you haven't looked at yet | green |
-| `W` | **Working** on a turn | blue, breathing |
-| `R` | **Ready**: idle, and you've seen its result | dim white |
-| `U` | **Unknown**: herdr can't tell yet (agent still starting) | faint white |
-| `-` | No agent in that slot | off |
-
-The same states drive the FLEET key colors, so `5N` on the screen means the A5 key is blinking amber.
-
-## Layout
-
-| Path | What it is |
+| Code | Means |
 | --- | --- |
-| `MacroPad Layout Studio.html` | Browser app and source of truth for the keymap; it generates `code.py` and the matching herdr config. |
-| `firmware/` | CircuitPython: `code.py` (generated), `boot.py`, `tally_link.py`, `render.py`, `oled.py`. Copy all of them to the `CIRCUITPY` drive. |
-| `cmd/tally`, `internal/` | The Tally CLI. |
-| `keycap_sheet.py` | Renders the keycap PDF. |
+| `N` | Needs you: a permission prompt or question is waiting |
+| `G` | Done: finished a turn you haven't looked at |
+| `W` | Working |
+| `R` | Ready: idle, and you've seen its result |
+| `U` | Unknown: herdr can't tell yet |
+| `null` | No agent in that slot |
+
+## Design
+
+- [`docs/design/tally-macropad.md`](docs/design/tally-macropad.md): the daemon, slot ordering, serial protocol v2.
+- [`docs/design/softpad.md`](docs/design/softpad.md): the soft pad, actions, remote listener, pairing, protocol v3.
+- [`docs/m0-herdr-input.md`](docs/m0-herdr-input.md): which herdr methods and key names the action table uses.
 
 ## Development
 
 ```bash
-go test ./...   # Go tests
-uv run pytest   # firmware tests under CPython
+go test ./...
 ```
 
 Work follows GitHub Flow: branch, open a PR, merge with a merge commit.

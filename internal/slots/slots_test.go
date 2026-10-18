@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sroberts/vibe-macropad/internal/herdr"
+	"github.com/sroberts/tally/internal/herdr"
 )
 
 // snap builds a snapshot from a compact description. Each workspace is a

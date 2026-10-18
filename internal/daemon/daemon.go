@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sroberts/vibe-macropad/internal/herdr"
-	"github.com/sroberts/vibe-macropad/internal/slots"
+	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/slots"
 )
 
 // Herdr is the part of herdr.Client the daemon uses.

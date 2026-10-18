@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sroberts/vibe-macropad/internal/herdr"
-	"github.com/sroberts/vibe-macropad/internal/slots"
+	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/slots"
 )
 
 // sub is one Subscribe call on the fake: notify pushes an event, and
