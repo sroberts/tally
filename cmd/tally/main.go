@@ -1,6 +1,6 @@
 // Command tally keeps the vibepads in step with herdr.
 //
-// serve keeps the MacroPad's lights in step with herdr.
+// serve keeps the MacroPad's lights in step with herdr and, with --remote,
 // serves the iPhone soft pad; status reads herdr once and shows the slot
 // each agent maps to; frame sends a hand-written frame to the pad; act runs
 // one soft pad action; pair pairs a phone; install-agent runs serve at
@@ -28,6 +28,8 @@ commands:
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
                                    run one soft pad action against herdr
+  pair [--label NAME] [--json] | --list | --revoke NAME
+                                   pair a phone (prints a QR code), list or revoke phones
   install-agent [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N]
                                    run tally serve at login (LaunchAgent or systemd unit), and now
   uninstall-agent                  stop and remove the background agent
@@ -49,6 +51,8 @@ func main() {
 		err = frame(os.Args[2:])
 	case "act":
 		err = act(os.Args[2:])
+	case "pair":
+		err = pair(os.Args[2:])
 	case "install-agent":
 		err = installAgent(os.Args[2:])
 	case "uninstall-agent":

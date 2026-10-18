@@ -51,6 +51,9 @@ type Daemon struct {
 	emit  func(slots.Frame) // called from the actor only; must not block
 	log   *slog.Logger
 
+	update  func(Update) // optional; called from the actor after every snapshot
+	tracker slots.Tracker
+
 	invalidate chan struct{} // cap 1: one pending invalidation covers any number
 	panes      chan []string // cap 1: the latest agent pane set to watch
 }
@@ -60,6 +63,21 @@ func New(cfg Config, h Herdr, emit func(slots.Frame), log *slog.Logger) *Daemon 
 	return &Daemon{cfg: cfg, herdr: h, emit: emit, log: log,
 		invalidate: make(chan struct{}, 1), panes: make(chan []string, 1)}
 }
+
+// Update is the actor's view after one snapshot attempt, for clients that
+// need more than the pad's v2 frame: the remote listener builds v3 frames
+// from it and the action table reads agent order and focus from it. Nothing
+// in it may be changed by the receiver.
+type Update struct {
+	Herdr    bool            // false while herdr is unreachable
+	Snapshot *herdr.Snapshot // nil while herdr is unreachable
+	State    slots.State
+	Tracked  slots.Tracked
+}
+
+// OnUpdate registers f to receive an Update after every snapshot attempt,
+// changed or not. Call it before Run; f must not block.
+func (d *Daemon) OnUpdate(f func(Update)) { d.update = f }
 
 // Run blocks until ctx is done.
 func (d *Daemon) Run(ctx context.Context) {
@@ -103,11 +121,18 @@ func (d *Daemon) actor(ctx context.Context) {
 				d.log.Info("herdr back")
 			}
 			lastErr = ""
-			f = slots.Compute(snap, d.cfg.Slots).Frame(0)
+			st := slots.Compute(snap, d.cfg.Slots)
+			f = st.Frame(0)
 			for _, a := range snap.Agents {
 				panes = append(panes, a.PaneID)
 			}
 			slices.Sort(panes)
+			if d.update != nil {
+				d.update(Update{Herdr: true, Snapshot: snap, State: st, Tracked: d.tracker.Observe(snap, time.Now())})
+			}
+		}
+		if err != nil && d.update != nil {
+			d.update(Update{})
 		}
 
 		if set := strings.Join(panes, " "); set != watched {

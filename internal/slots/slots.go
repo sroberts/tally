@@ -35,6 +35,7 @@ type State struct {
 	Overflow []Slot  // agents beyond the slot count, in order
 	Focus    *int    // 1-based slot; 0 beyond the slots; nil when the focus is not an agent
 	FState   *string // focused agent's code, even beyond the slots
+	FPane    *string // focused agent's pane id, even beyond the slots
 	Space    string  // name of the focused agent's space; "" when none
 }
 
@@ -59,6 +60,7 @@ func Compute(s *herdr.Snapshot, n int) State {
 			}
 			st.Focus = &focus
 			st.FState = &slot.Code
+			st.FPane = &a.PaneID
 			st.Space = labels[a.WorkspaceID]
 		}
 	}
