@@ -1,8 +1,10 @@
-// Command tally drives the MacroPad's Tally status lights.
+// Command tally keeps the vibepads in step with herdr.
 //
-// serve keeps the pad's lights in step with herdr; status reads herdr once
-// and shows the slot each agent maps to; frame sends a hand-written frame to
-// the pad; install-agent runs serve at login; doctor checks the setup.
+// serve keeps the MacroPad's lights in step with herdr.
+// serves the iPhone soft pad; status reads herdr once and shows the slot
+// each agent maps to; frame sends a hand-written frame to the pad; act runs
+// one soft pad action; pair pairs a phone; install-agent runs serve at
+// login; doctor checks the setup.
 package main
 
 import (
@@ -19,14 +21,17 @@ import (
 const usage = `usage: tally <command> [arguments]
 
 commands:
-  serve [--port PATH] [--slots N] [--verbose]
-                                   keep the MacroPad's lights in step with herdr
-  status [--json] [--slots N]      show herdr's agents in Fleet key order (--json prints the frame)
+  serve [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N] [--verbose]
+                                   keep the MacroPad's lights in step with herdr;
+                                   --remote also serves paired phones on :47824
+  status [--json] [--slots N]      show herdr's agents in slot order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
-  install-agent [--port PATH] [--slots N]
-                                   run tally serve at login (a LaunchAgent), and now
-  uninstall-agent                  stop and remove the LaunchAgent
-  doctor                           check herdr, its settings, the LaunchAgent and the pad
+  act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
+                                   run one soft pad action against herdr
+  install-agent [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N]
+                                   run tally serve at login (LaunchAgent or systemd unit), and now
+  uninstall-agent                  stop and remove the background agent
+  doctor                           check herdr, its settings, the agent, the pad and the remote listener
 `
 
 func main() {
@@ -42,6 +47,8 @@ func main() {
 		err = status(os.Args[2:])
 	case "frame":
 		err = frame(os.Args[2:])
+	case "act":
+		err = act(os.Args[2:])
 	case "install-agent":
 		err = installAgent(os.Args[2:])
 	case "uninstall-agent":

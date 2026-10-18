@@ -52,6 +52,18 @@ type Error struct {
 
 func (e *Error) Error() string { return "herdr: " + e.Code + ": " + e.Message }
 
+// OfflineError means herdr's socket did not accept a connection.
+type OfflineError struct {
+	Path string
+	Err  error
+}
+
+func (e *OfflineError) Error() string {
+	return fmt.Sprintf("herdr is not reachable at %s: %v", e.Path, e.Err)
+}
+
+func (e *OfflineError) Unwrap() error { return e.Err }
+
 // Client calls herdr at one socket path. herdr answers one request per
 // connection and then closes it, so every call dials afresh.
 type Client struct {
@@ -85,6 +97,12 @@ func (c *Client) send(method string, params any) (net.Conn, error) {
 	if !allowed[method] {
 		return nil, fmt.Errorf("herdr: method %q is not on Tally's read-only allowlist", method)
 	}
+	return dial(c.Path, method, params)
+}
+
+// dial connects to herdr at path and writes one request. Callers check
+// their allowlist first.
+func dial(path, method string, params any) (net.Conn, error) {
 	if params == nil {
 		params = struct{}{}
 	}
@@ -97,9 +115,9 @@ func (c *Client) send(method string, params any) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := net.DialTimeout("unix", c.Path, Timeout)
+	conn, err := net.DialTimeout("unix", path, Timeout)
 	if err != nil {
-		return nil, fmt.Errorf("herdr is not reachable at %s: %w", c.Path, err)
+		return nil, &OfflineError{Path: path, Err: err}
 	}
 	conn.SetDeadline(time.Now().Add(Timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
