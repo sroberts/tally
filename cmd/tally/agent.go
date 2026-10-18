@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sroberts/tally/internal/launchd"
 	"github.com/sroberts/tally/internal/slots"
+	"github.com/sroberts/tally/internal/systemd"
 )
 
 func runCmd(name string, args ...string) ([]byte, error) {
@@ -38,6 +40,9 @@ func installAgent(args []string) error {
 	fs := flag.NewFlagSet("install-agent", flag.ExitOnError)
 	port := fs.String("port", "", "serial port for tally serve instead of discovery")
 	n := fs.Int("slots", slots.DefaultSlots, "number of Fleet slot keys")
+	remoteOn := fs.Bool("remote", false, "also serve paired phones (tally serve --remote)")
+	listen := fs.String("listen", "", "address for --remote (default :47824)")
+	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -49,26 +54,42 @@ func installAgent(args []string) error {
 	if err != nil {
 		return err
 	}
-	a := launchd.Agent{Program: program, Env: map[string]string{}}
+	var serveArgs []string
 	if *port != "" {
-		a.Args = append(a.Args, "--port", *port)
+		serveArgs = append(serveArgs, "--port", *port)
 	}
 	if *n != slots.DefaultSlots {
-		a.Args = append(a.Args, "--slots", strconv.Itoa(*n))
+		serveArgs = append(serveArgs, "--slots", strconv.Itoa(*n))
 	}
-	// launchd doesn't see the shell's environment; keep the herdr session.
+	if *remoteOn {
+		serveArgs = append(serveArgs, "--remote")
+	}
+	if *listen != "" {
+		serveArgs = append(serveArgs, "--listen", *listen)
+	}
+	if *noDevice {
+		serveArgs = append(serveArgs, "--no-device")
+	}
+	// The service manager doesn't see the shell's environment; keep the
+	// herdr session.
+	env := map[string]string{}
 	for _, k := range []string{"HERDR_SOCKET_PATH", "HERDR_SESSION"} {
 		if v := os.Getenv(k); v != "" {
-			a.Env[k] = v
+			env[k] = v
 		}
 	}
+	runs := strings.Join(append([]string{program, "serve"}, serveArgs...), " ")
+	if runtime.GOOS == "linux" {
+		return installUnit(systemd.Agent{Program: program, Args: serveArgs, Env: env}, home, runs)
+	}
 
+	a := launchd.Agent{Program: program, Args: serveArgs, Env: env}
 	plist, err := launchd.Install(a, home, runCmd)
 	if err != nil {
 		return err
 	}
 	_, log := launchd.Paths(home)
-	fmt.Printf("installed %s\n  runs:  %s\n  log:   %s\n", plist, strings.Join(append([]string{program, "serve"}, a.Args...), " "), log)
+	fmt.Printf("installed %s\n  runs:  %s\n  log:   %s\n", plist, runs, log)
 
 	time.Sleep(time.Second)
 	st, err := launchd.Status(runCmd)
@@ -84,10 +105,38 @@ func installAgent(args []string) error {
 	return nil
 }
 
+func installUnit(a systemd.Agent, home, runs string) error {
+	path, err := systemd.Install(a, home, runCmd)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("installed %s\n  runs:  %s\n  log:   journalctl --user -u %s\n", path, runs, systemd.Unit)
+	time.Sleep(time.Second)
+	st, err := systemd.Status(runCmd)
+	switch {
+	case err != nil:
+		return err
+	case st.Active == "active":
+		fmt.Printf("  state: running (pid %d)\n", st.PID)
+	default:
+		fmt.Printf("  state: %s/%s, result %s; see the journal\n", st.Active, st.Sub, st.Result)
+	}
+	fmt.Println("check everything with: tally doctor")
+	return nil
+}
+
 func uninstallAgent(args []string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
+	}
+	if runtime.GOOS == "linux" {
+		path, err := systemd.Uninstall(home, runCmd)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("removed %s (its log stays in the journal)\n", path)
+		return nil
 	}
 	plist, err := launchd.Uninstall(home, runCmd)
 	if err != nil {

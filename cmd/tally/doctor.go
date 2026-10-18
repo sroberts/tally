@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"go.bug.st/serial"
 
@@ -12,15 +13,23 @@ import (
 	"github.com/sroberts/tally/internal/doctor"
 	"github.com/sroberts/tally/internal/herdr"
 	"github.com/sroberts/tally/internal/launchd"
+	"github.com/sroberts/tally/internal/systemd"
 )
 
 func doctorCmd(args []string) error {
-	agent, agentResult := checkAgent()
+	var agent launchd.State
+	var agentResult doctor.Result
+	if runtime.GOOS == "linux" {
+		agent, agentResult = checkUnit()
+	} else {
+		agent, agentResult = checkAgent()
+	}
 	results := []doctor.Result{checkHerdr(), checkClaude(), checkSort(), {
 		Name: "agents view", Level: doctor.Info,
 		Detail: "not checked: herdr can only set or clear a plugin Agents view, and Tally never writes",
 		Fix:    "if keys and the sidebar disagree, clear any plugin that reorders the Agents view",
 	}, agentResult, checkPad(agent)}
+	results = append(results, checkRemote()...)
 
 	failed := false
 	for _, r := range results {
@@ -142,4 +151,25 @@ func checkPad(agent launchd.State) doctor.Result {
 		r.Fix = "copy firmware/*.py to CIRCUITPY and replug the pad (boot.py runs only after a hard reset)"
 	}
 	return r
+}
+
+// checkUnit is checkAgent for the systemd user unit. It returns the state in
+// launchd's terms so checkPad can tell whether the daemon holds the port.
+func checkUnit() (launchd.State, doctor.Result) {
+	r := doctor.Result{Name: "systemd unit"}
+	st, err := systemd.Status(runCmd)
+	var as launchd.State
+	switch {
+	case err != nil:
+		r.Level, r.Detail = doctor.Warn, err.Error()
+	case !st.Loaded:
+		r.Level, r.Detail, r.Fix = doctor.Warn, "not installed: tally runs only while tally serve runs in a terminal", "tally install-agent"
+	case st.Active != "active":
+		r.Level, r.Detail = doctor.Fail, fmt.Sprintf("%s is %s/%s, result %s", systemd.Unit, st.Active, st.Sub, st.Result)
+		r.Fix = "journalctl --user -u " + systemd.Unit + ", then systemctl --user restart " + systemd.Unit
+	default:
+		as.State = "running"
+		r.Level, r.Detail = doctor.OK, fmt.Sprintf("%s running (pid %d): %s", systemd.Unit, st.PID, st.Exec)
+	}
+	return as, r
 }

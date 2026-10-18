@@ -130,6 +130,8 @@ func TestTailscaleName(t *testing.T) {
 		`{"BackendState":"Running","Self":{"DNSName":"mbp.tail1234.ts.net."}}`: "mbp.tail1234.ts.net",
 		`{"BackendState":"Stopped","Self":{"DNSName":"mbp.tail1234.ts.net."}}`: "",
 		`not json`: "",
+		"Warning: client version \"1.1\" != tailscaled server version \"1.2\"\n" +
+			`{"BackendState":"Running","Self":{"DNSName":"mbp.ts.net."}}`: "mbp.ts.net",
 	}
 	for in, want := range cases {
 		if got := TailscaleName([]byte(in)); got != want {

@@ -1,6 +1,7 @@
 package pairing
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net"
@@ -97,7 +98,12 @@ func LANAddrs() []string {
 
 // TailscaleName reads the MagicDNS name from `tailscale status --json`
 // output, without the trailing dot. It returns "" when there is none.
+// Anything before the JSON, such as a client/server version warning, is
+// skipped.
 func TailscaleName(statusJSON []byte) string {
+	if i := bytes.IndexByte(statusJSON, '{'); i > 0 {
+		statusJSON = statusJSON[i:]
+	}
 	var st struct {
 		BackendState string
 		Self         struct {
