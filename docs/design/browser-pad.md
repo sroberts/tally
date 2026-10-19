@@ -25,7 +25,10 @@ A browser can't pin a self-signed certificate, so by default the listener presen
 - `web.Tailscale` runs `tailscale cert --cert-file … --key-file … <name>.ts.net` into `~/.config/tally/web/` at start and daily after, retrying every minute while Tailscale is down (it often starts after tally at login). `tailscale cert` reuses its cached certificate until renewal is due. Handshakes fail until the first certificate arrives.
 - It needs MagicDNS and HTTPS certificates on in the tailnet; on Linux the user also needs `sudo tailscale set --operator=$USER`. Issuing the certificate publishes the `*.ts.net` name in Certificate Transparency logs.
 - tally looks for the `tailscale` CLI on `PATH`, then in Homebrew's, the Mac app's and NixOS's locations, since a LaunchAgent or systemd unit doesn't get the login shell's `PATH`.
-- `--web-cert self` presents tally's own self-signed certificate. Browsers warn until it is trusted on the device; it is for LAN-only setups and local testing.
+- `--web-cert self` keeps the name out of those logs: tally runs its own certificate authority in `~/.config/tally/web/self/` (`web.Self`, refreshed daily) and each device trusts it once (`tally web --ca` writes it as DER for AirDrop or Keychain Access). It does not reuse the pairing certificate, which phones pin by fingerprint and which no browser accepts: browsers need a CA they trust, a SAN for the name, and, on Apple platforms, a server certificate valid no more than 825 days.
+  - The CA is ECDSA P-256, valid ten years, `pathlen:0`, with critical name constraints permitting only the MagicDNS name and excluding every IP range, so its key can't vouch for anything else. tally makes a new one when the name changes or it is within a server lifetime of expiry, and devices must trust that again.
+  - The server certificate has the MagicDNS name as its only SAN, server auth only, and is valid 397 days (under Apple's 398-day limit for public certificates too). It is reissued with 30 days left, or when it no longer verifies against the CA for the current name.
+  - `tally doctor` verifies the server certificate against the CA for the current name and reports both expiries.
 
 The listener binds every interface by default, so on the LAN the page is reachable by address too, but only the MagicDNS name matches the certificate.
 
