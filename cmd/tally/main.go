@@ -1,9 +1,9 @@
-// Command tally keeps the vibepads in step with herdr.
+// Command tally keeps the agent pads in step with herdr.
 //
 // serve keeps the MacroPad's lights in step with herdr and, with --remote,
-// serves the iPhone soft pad; status reads herdr once and shows the slot
+// serves paired phones; status reads herdr once and shows the slot
 // each agent maps to; frame sends a hand-written frame to the pad; act runs
-// one soft pad action; pair pairs a phone; web sets the browser pad's
+// one remote action; pair pairs a phone; web sets the browser pad's
 // password and lists signed-in browsers; install-agent runs serve at
 // login; doctor checks the setup.
 package main
@@ -30,7 +30,7 @@ commands:
   status [--json] [--slots N]      show herdr's agents in slot order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
-                                   run one soft pad action against herdr
+                                   run one pad action against herdr
   pair [--label NAME] [--json] | --list | --revoke NAME
                                    pair a phone (prints a QR code), list or revoke phones
   web [--set-password [--password-stdin]] | --list | --revoke ID|all

@@ -1,4 +1,4 @@
-// Package remote serves the iPhone soft pad: a TLS 1.3 WebSocket on port
+// Package remote serves paired phones: a TLS 1.3 WebSocket on port
 // 47824 speaking protocol v3 (docs/protocol-v3.md).
 //
 // Trust comes from pairing, not the network: tally presents its pinned
@@ -149,7 +149,7 @@ func (s *Server) TLSConfig() *tls.Config {
 	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{s.cert}}
 }
 
-// Serve accepts soft pad connections on ln, a plain TCP listener, until ctx
+// Serve accepts remote connections on ln, a plain TCP listener, until ctx
 // is done. It wraps ln in TLS itself.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	srv := &http.Server{Handler: http.HandlerFunc(s.handle), TLSConfig: s.TLSConfig(),

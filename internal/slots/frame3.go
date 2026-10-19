@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// VersionV3 is the soft pad's WebSocket protocol version.
+// VersionV3 is the remote clients' WebSocket protocol version.
 const VersionV3 = 3
 
 // SpaceMaxV3 is the most characters of a space name a v3 frame carries.
 const SpaceMaxV3 = 32
 
-// FrameV3 is a protocol v3 state frame for the soft pad. Unlike v2 it names
+// FrameV3 is a protocol v3 state frame for remote clients. Unlike v2 it names
 // each slot's pane, so actions can target it, and carries how long blocked
 // agents have waited.
 type FrameV3 struct {

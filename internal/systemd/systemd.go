@@ -35,7 +35,7 @@ func Path(home string) string {
 // File renders the unit. systemd restarts tally 2 s after any exit.
 func (a Agent) File() []byte {
 	var b bytes.Buffer
-	b.WriteString("[Unit]\nDescription=tally: herdr agent status for the vibepads\n\n[Service]\n")
+	b.WriteString("[Unit]\nDescription=tally: herdr agent status for the agent pads\n\n[Service]\n")
 	b.WriteString("ExecStart=" + quote(a.Program) + " serve")
 	for _, arg := range a.Args {
 		b.WriteString(" " + quote(arg))

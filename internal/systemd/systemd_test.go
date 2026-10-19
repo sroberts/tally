@@ -10,7 +10,7 @@ func TestUnitFile(t *testing.T) {
 	a := Agent{Program: "/home/me/.local/bin/tally", Args: []string{"--remote", "--no-device"},
 		Env: map[string]string{"HERDR_SESSION": "work", "HERDR_SOCKET_PATH": "/run/a b.sock"}}
 	want := `[Unit]
-Description=tally: herdr agent status for the vibepads
+Description=tally: herdr agent status for the agent pads
 
 [Service]
 ExecStart=/home/me/.local/bin/tally serve --remote --no-device

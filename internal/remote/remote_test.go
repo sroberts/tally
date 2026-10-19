@@ -81,7 +81,7 @@ func start(t *testing.T, tweak func(*Config)) *harness {
 		t.Fatal(err)
 	}
 	h.fp = fp
-	if h.token, err = h.store.Issue("iphone", time.Now()); err != nil {
+	if h.token, err = h.store.Issue("phone", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	snap := world()
@@ -159,7 +159,7 @@ func (h *harness) authed() *websocket.Conn {
 		h.t.Fatal(err)
 	}
 	h.t.Cleanup(func() { c.CloseNow() })
-	h.send(c, map[string]any{"t": "auth", "v": 3, "token": h.token, "client": "softpad/1.0"})
+	h.send(c, map[string]any{"t": "auth", "v": 3, "token": h.token, "client": "pad/1.0"})
 	hello := h.mustNext(c, "hello")
 	if hello["host"] != "mbp" || hello["host_id"] != "7f3c" || hello["v"] != 3.0 {
 		h.t.Errorf("hello = %v", hello)
@@ -299,7 +299,7 @@ func TestRevokeDropsTheLiveSession(t *testing.T) {
 	h := start(t, nil)
 	c := h.authed()
 	h.mustNext(c, "state")
-	if err := h.store.Revoke("iphone"); err != nil {
+	if err := h.store.Revoke("phone"); err != nil {
 		t.Fatal(err)
 	}
 	code, ok := closed(h, c)

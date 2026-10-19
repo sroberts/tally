@@ -14,7 +14,7 @@ func pair(args []string) error {
 	label := fs.String("label", "", "name for this phone (default phone, phone-2, ...)")
 	list := fs.Bool("list", false, "list paired phones")
 	revoke := fs.String("revoke", "", "unpair the phone with this label and drop its session")
-	asJSON := fs.Bool("json", false, "also print the pairing payload as JSON (paste it into the Simulator)")
+	asJSON := fs.Bool("json", false, "also print the pairing payload as JSON")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -65,7 +65,7 @@ func pair(args []string) error {
 		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), pairing.Port)}
 
 	pairing.RenderQR(os.Stdout, p)
-	fmt.Printf("scan this with vibepad on your phone. it is shown once.\n")
+	fmt.Printf("scan this on your phone to pair it. it is shown once.\n")
 	fmt.Printf("  host %s, cert %s…\n", host, fp[:16])
 	for _, e := range p.Endpoints {
 		switch e.Kind {

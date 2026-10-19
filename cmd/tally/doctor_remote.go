@@ -17,7 +17,7 @@ import (
 	"github.com/sroberts/tally/internal/remote"
 )
 
-// checkRemote checks the soft pad's side: the listener, paired phones,
+// checkRemote checks the remote listener's side: the listener, paired phones,
 // Bonjour, Tailscale, the firewall and the write path.
 func checkRemote() []doctor.Result {
 	store, err := pairing.DefaultStore()

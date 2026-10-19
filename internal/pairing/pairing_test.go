@@ -142,7 +142,7 @@ func TestTailscaleName(t *testing.T) {
 
 func TestStateFileIsReadable(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
-	s.Issue("iphone", time.Unix(0, 0))
+	s.Issue("phone", time.Unix(0, 0))
 	var raw map[string]any
 	b, _ := os.ReadFile(s.File())
 	if err := json.Unmarshal(b, &raw); err != nil || raw["host_id"] == nil || raw["phones"] == nil {

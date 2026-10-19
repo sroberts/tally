@@ -19,7 +19,7 @@ var writeAllowed = map[string]bool{
 	"tab.create":      true,
 }
 
-// Command is a program the soft pad may start in a new pane. There is no way
+// Command is a program a remote client may start in a new pane. There is no way
 // to build one from outside this package, so a Writer can only ever type
 // these two lines.
 type Command struct{ line string }
@@ -42,7 +42,7 @@ type PaneInfo struct {
 	Agent       *string `json:"agent"`
 }
 
-// Writer calls herdr's write methods for the soft pad. Every call goes
+// Writer calls herdr's write methods for remote clients. Every call goes
 // through writeAllowed; see docs/m0-herdr-input.md for the method names.
 type Writer struct {
 	Path string

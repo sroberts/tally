@@ -14,7 +14,7 @@ func Listener(certErr, probeErr error, port int, addrs []string) Result {
 	r := Result{Name: "remote"}
 	switch {
 	case certErr != nil:
-		r.Level, r.Detail, r.Fix = Info, "no certificate yet, so the soft pad is not set up", "tally pair"
+		r.Level, r.Detail, r.Fix = Info, "no certificate yet, so remote clients are not set up", "tally pair"
 	case probeErr != nil && strings.Contains(probeErr.Error(), "refused"):
 		r.Level, r.Detail = Info, fmt.Sprintf("nothing listening on :%d", port)
 		r.Fix = "tally install-agent --remote (or tally serve --remote)"
