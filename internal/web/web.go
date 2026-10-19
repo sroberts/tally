@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -106,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /logout", s.signOut)
 	mux.HandleFunc("GET /ws", s.ws)
 	mux.HandleFunc("GET /session", s.session)
+	mux.HandleFunc("POST /install-code", s.installCode)
 	mux.HandleFunc("GET /manifest.webmanifest", s.manifest)
 	for path := range s.icons {
 		mux.HandleFunc("GET "+path, s.icon)
@@ -173,9 +175,19 @@ func (s *Server) setCookie(w http.ResponseWriter, value string, age time.Duratio
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 }
 
-// pad serves the pad to a signed-in browser and sends anyone else to sign in.
+// pad serves the pad to a signed-in browser and sends anyone else to sign
+// in. A ?code= from a QR code or a home screen launch signs the browser in
+// first, then redirects so the code leaves the address bar.
 func (s *Server) pad(w http.ResponseWriter, r *http.Request) {
 	b, ok := s.browser(r)
+	if code := r.URL.Query().Get("code"); code != "" {
+		if !ok && !s.redeem(w, r, code) {
+			http.Redirect(w, r, "/login?expired=1", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
 	if !ok {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
@@ -185,6 +197,59 @@ func (s *Server) pad(w http.ResponseWriter, r *http.Request) {
 		s.setCookie(w, c.Value, CookieAge) // a pad in use stays signed in
 	}
 	s.serveFile(w, "static/index.html", "text/html; charset=utf-8")
+}
+
+// redeem signs the browser in with a single-use code, counting a bad code
+// as a failed sign-in.
+func (s *Server) redeem(w http.ResponseWriter, r *http.Request, code string) bool {
+	ip := sourceIP(r)
+	if s.limiter.blocked(ip) {
+		return false
+	}
+	ok, err := s.cfg.Store.RedeemCode(code, s.cfg.Now())
+	if err != nil {
+		s.cfg.Log.Error("web.json", "err", err)
+	}
+	if !ok {
+		s.limiter.fail(ip)
+		s.cfg.Log.Info("browser sign-in code refused", "from", ip)
+		return false
+	}
+	return s.startSession(w, r, "code")
+}
+
+// startSession records a newly signed-in browser and sets its cookie.
+func (s *Server) startSession(w http.ResponseWriter, r *http.Request, how string) bool {
+	ip := sourceIP(r)
+	token, b, err := s.cfg.Store.SignIn(Label(r.UserAgent()), ip, s.cfg.Now())
+	if err != nil {
+		s.cfg.Log.Error("web.json", "err", err)
+		return false
+	}
+	s.cfg.Log.Info("browser signed in", "browser", b.Label, "id", b.ID, "from", ip, "with", how)
+	s.setCookie(w, token, CookieAge)
+	return true
+}
+
+// installCode gives a signed-in page a code to put in its own address, so
+// the copy saved to the home screen (which has its own cookies on iOS)
+// signs itself in on first launch.
+func (s *Server) installCode(w http.ResponseWriter, r *http.Request) {
+	if !sameOrigin(r) {
+		http.Error(w, "cross-origin request refused", http.StatusForbidden)
+		return
+	}
+	if _, ok := s.browser(r); !ok {
+		http.Error(w, "sign in first", http.StatusUnauthorized)
+		return
+	}
+	code, err := s.cfg.Store.IssueCode(InstallCodeTTL, s.cfg.Now())
+	if err != nil {
+		http.Error(w, "can't save the code", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"code":%q}`, code)
 }
 
 func (s *Server) serveFile(w http.ResponseWriter, name, typ string) {
@@ -217,7 +282,11 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.renderLogin(w, http.StatusOK, "")
+	msg := ""
+	if r.URL.Query().Get("expired") != "" {
+		msg = "that sign-in code has expired or was used. run tally web for a new one"
+	}
+	s.renderLogin(w, http.StatusOK, msg)
 }
 
 // signIn checks the password and, when it matches, signs the browser in.
@@ -255,14 +324,10 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		s.renderLogin(w, http.StatusUnauthorized, "wrong password")
 		return
 	}
-	token, b, err := s.cfg.Store.SignIn(Label(r.UserAgent()), ip, s.cfg.Now())
-	if err != nil {
-		s.cfg.Log.Error("web.json", "err", err)
+	if !s.startSession(w, r, "password") {
 		s.renderLogin(w, http.StatusInternalServerError, "tally can't save the sign-in")
 		return
 	}
-	s.cfg.Log.Info("browser signed in", "browser", b.Label, "id", b.ID, "from", ip)
-	s.setCookie(w, token, CookieAge)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -354,7 +419,9 @@ func (s *Server) closeWhere(match func(tokenSHA256 string) bool, code websocket.
 
 func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/manifest+json")
-	w.Write([]byte(`{"name":"tally","short_name":"tally","start_url":"/","scope":"/","display":"standalone",` +
+	// No start_url: the home screen copy opens the address it was saved
+	// from, which carries a sign-in code (see installCode).
+	w.Write([]byte(`{"name":"tally","short_name":"tally","scope":"/","display":"standalone",` +
 		`"orientation":"portrait","background_color":"#0f0e12","theme_color":"#000000",` +
 		`"icons":[{"src":"/icon-180.png","sizes":"180x180","type":"image/png"},` +
 		`{"src":"/icon-512.png","sizes":"512x512","type":"image/png"}]}`))

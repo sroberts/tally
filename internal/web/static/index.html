@@ -82,10 +82,32 @@
     <label class="toggle"><input type="checkbox" id="s-awake"><i></i><span>keep awake while live</span></label>
     <p class="note" id="s-awake-note"></p>
   </div>
+  <div class="module" id="s-home">
+    <div class="mhead"><span class="n">03</span><span class="t">home screen</span></div>
+    <p class="note">the pad runs full screen from the home screen, and stays signed in there on its own.</p>
+    <form><button class="key compact wide" type="button" id="s-install"><span class="legend">add to home screen</span></button></form>
+  </div>
   <div class="module">
-    <div class="mhead"><span class="n">03</span><span class="t">this browser</span></div>
+    <div class="mhead"><span class="n">04</span><span class="t">this browser</span></div>
     <p class="note">signed in with tally's web password. tally web --list shows every signed-in browser; tally web --revoke signs one out.</p>
     <form method="post" action="/logout"><button class="key compact wide" type="submit"><span class="legend">sign out</span></button></form>
+  </div>
+</section>
+
+<section class="install" id="install" hidden aria-label="add to home screen">
+  <div class="card">
+    <div class="top"><i></i><span>first run</span></div>
+    <h2>put the pad on your home screen</h2>
+    <ol id="install-steps">
+      <li><span class="n">01</span><span>tap <b>share</b> in safari's toolbar</span></li>
+      <li><span class="n">02</span><span>choose <b>add to home screen</b>, then <b>add</b></span></li>
+      <li><span class="n">03</span><span>open <b>tally</b> from the home screen</span></li>
+    </ol>
+    <p>it opens full screen with no browser bars and signs itself in. the link in this page works once, for an hour.</p>
+    <div class="keys">
+      <button class="key compact" id="install-later"><span class="legend">later</span></button>
+      <button class="key compact go" id="install-ok"><span class="legend">got it</span></button>
+    </div>
   </div>
 </section>
 </body>

@@ -131,10 +131,12 @@ func newWeb(ctx context.Context, wg *sync.WaitGroup, srv *remote.Server, certMod
 		return nil, err
 	}
 	ws := web.Store{Dir: store.Dir}
-	if st, err := ws.Load(); err != nil {
+	// Never serve without a password. A generated one isn't logged: tally
+	// web prints a sign-in QR code, and --set-password picks your own.
+	if pw, err := ws.EnsurePassword(); err != nil {
 		return nil, err
-	} else if st.Password == "" {
-		log.Info("no browser pad password yet; run tally web --set-password")
+	} else if pw != "" {
+		log.Info("set a random browser pad password; run tally web for a sign-in QR code")
 	}
 	var certs web.Certs
 	if certMode == "self" {

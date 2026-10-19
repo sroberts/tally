@@ -459,3 +459,101 @@ func mustRead(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+func TestEnsurePasswordOnlyWhenUnset(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	pw, err := s.EnsurePassword()
+	if err != nil || len(pw) != 23 {
+		t.Fatalf("generated %q, %v", pw, err)
+	}
+	st, _ := s.Load()
+	if !st.CheckPassword(pw) {
+		t.Fatal("generated password doesn't check")
+	}
+	if again, _ := s.EnsurePassword(); again != "" {
+		t.Fatal("replaced an existing password")
+	}
+}
+
+func TestCodesAreSingleUseAndExpire(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	code, err := s.IssueCode(QRCodeTTL, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(mustRead(t, s.File()), code) {
+		t.Fatal("code stored in the clear")
+	}
+	if ok, _ := s.RedeemCode(code, now.Add(time.Minute)); !ok {
+		t.Fatal("fresh code refused")
+	}
+	if ok, _ := s.RedeemCode(code, now.Add(time.Minute)); ok {
+		t.Fatal("code used twice")
+	}
+	old, _ := s.IssueCode(QRCodeTTL, now)
+	if ok, _ := s.RedeemCode(old, now.Add(QRCodeTTL+time.Second)); ok {
+		t.Fatal("expired code accepted")
+	}
+	if ok, _ := s.RedeemCode("junk", now); ok {
+		t.Fatal("junk accepted")
+	}
+	c, _ := s.IssueCode(QRCodeTTL, now)
+	s.SetPassword(password)
+	if ok, _ := s.RedeemCode(c, now); ok {
+		t.Fatal("a new password must void outstanding codes")
+	}
+}
+
+func TestCodeLinkSignsInOnce(t *testing.T) {
+	h := start(t)
+	code, _ := h.store.IssueCode(QRCodeTTL, time.Now())
+	c := h.client()
+	r := h.get(c, "/?code="+code)
+	if r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/" {
+		t.Fatalf("code link: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+	if r := h.get(c, "/"); r.StatusCode != 200 {
+		t.Fatalf("/ after code: %d", r.StatusCode)
+	}
+	other := h.client()
+	if r := h.get(other, "/?code="+code); r.Header.Get("Location") != "/login?expired=1" {
+		t.Fatalf("reused code: %d %s", r.StatusCode, r.Header.Get("Location"))
+	}
+}
+
+func TestInstallCodeForTheHomeScreen(t *testing.T) {
+	h := start(t)
+	post := func(c *http.Client) *http.Response {
+		req, _ := http.NewRequest("POST", h.url("/install-code"), nil)
+		req.Header.Set("Origin", "https://"+h.addr)
+		r, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := post(h.client()); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("signed out: %d", r.StatusCode)
+	}
+	safari := h.client()
+	h.login(safari, password, "https://"+h.addr)
+	r := post(safari)
+	var body struct{ Code string }
+	json.NewDecoder(r.Body).Decode(&body)
+	r.Body.Close()
+	if body.Code == "" {
+		t.Fatalf("no code: %d", r.StatusCode)
+	}
+	// Safari reloading its own address keeps the code for the home screen copy.
+	if r := h.get(safari, "/?code="+body.Code); r.Header.Get("Location") != "/" {
+		t.Fatalf("signed-in reload: %s", r.Header.Get("Location"))
+	}
+	homeScreen := h.client() // its own cookie jar, as on iOS
+	if r := h.get(homeScreen, "/?code="+body.Code); r.Header.Get("Location") != "/" {
+		t.Fatalf("home screen launch: %s", r.Header.Get("Location"))
+	}
+	if r := h.get(homeScreen, "/"); r.StatusCode != 200 {
+		t.Fatalf("home screen copy not signed in: %d", r.StatusCode)
+	}
+}

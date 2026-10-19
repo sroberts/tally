@@ -597,10 +597,64 @@ function settings() {
   $("settings-close").addEventListener("click", () => { $("settings").hidden = true; });
 }
 
+// --- Home screen ---------------------------------------------------------------
+
+const standalone = () => navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+let deferredInstall = null; // Chrome on Android offers its own install prompt
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; });
+
+// The home screen copy opens the address it was saved from and, on iOS,
+// has its own cookies. So before the user adds it, put a fresh single-use
+// sign-in code in this page's address; its first launch signs itself in.
+async function armInstallLink() {
+  try {
+    const r = await fetch("/install-code", { method: "POST", credentials: "same-origin" });
+    if (!r.ok) return;
+    const { code } = await r.json();
+    history.replaceState(null, "", `/?code=${encodeURIComponent(code)}`);
+  } catch { /* offline: the home screen copy will ask for the password */ }
+}
+
+async function showInstall() {
+  if (deferredInstall) {
+    await armInstallLink();
+    deferredInstall.prompt();
+    deferredInstall = null;
+    return;
+  }
+  if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    $("install-steps").children[0].lastElementChild.innerHTML = "open your browser's menu";
+    $("install-steps").children[1].lastElementChild.innerHTML = "choose <b>install</b> or <b>add to home screen</b>";
+  }
+  await armInstallLink();
+  $("install").hidden = false;
+}
+
+function hideInstall() {
+  $("install").hidden = true;
+  save("installSeen", true);
+}
+
+function install() {
+  if (standalone()) {
+    $("s-home").hidden = true;
+    return;
+  }
+  $("install-later").addEventListener("click", hideInstall);
+  $("install-ok").addEventListener("click", hideInstall);
+  $("s-install").addEventListener("click", () => { $("settings").hidden = true; showInstall(); });
+  // First run in a browser tab: recommend the home screen once.
+  if (!store("installSeen", false)) setTimeout(showInstall, 800);
+}
+
 // --- Keyboard ------------------------------------------------------------------
 
 function keyboard() {
   addEventListener("keydown", (e) => {
+    if (!$("install").hidden) {
+      if (e.key === "Escape") hideInstall();
+      return;
+    }
     if (!$("settings").hidden) {
       if (e.key === "Escape") $("settings").hidden = true;
       return;
@@ -639,6 +693,7 @@ fit();
 addEventListener("resize", fit);
 document.fonts?.ready.then(fit);
 settings();
+install();
 keyboard();
 $("talk-text").addEventListener("input", updateCount);
 $("talk-text").addEventListener("keydown", (e) => {

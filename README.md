@@ -33,14 +33,16 @@ The phone pins tally's certificate from the QR code and authenticates with a tok
 ### The browser pad
 
 ```bash
-tally web --set-password            # 12+ characters; signs every browser out
-tally install-agent --remote --web  # serve the browser pad on :47825 too
-tally web                           # where to open it: https://<machine>.<tailnet>.ts.net:47825/
+tally install-agent --remote --web  # serve the browser pad on :47825 too; prints a sign-in QR code
+tally web                           # a fresh sign-in QR code (and link)
+tally web --set-password            # pick your own password (12+ characters); signs every browser out
 tally web --list                    # signed-in browsers
 tally web --revoke 3f9a01c2         # sign one out (or --revoke all)
 ```
 
-Open the URL on your phone, sign in once, then Share → Add to Home Screen for a full-screen pad. It is the app's screen, lighting and actions over the same protocol v3 session; TALK is a text box (use the keyboard's mic to dictate). tally keeps an argon2id hash of the password and a hash of each browser's cookie in `~/.config/tally/web.json`; failed sign-ins are limited per address and overall.
+Scan the QR code with your phone's camera: it opens `https://<machine>.<tailnet>.ts.net:47825/` and signs that browser in. The code works once, for 15 minutes. The first time, the pad offers to go on the home screen (Share → Add to Home Screen); the home screen copy opens full screen and signs itself in, because the page puts a fresh one-hour code in its own address before you add it (on iOS a home screen web app keeps its own cookies). It is the app's screen, lighting and actions over the same protocol v3 session; TALK is a text box (use the keyboard's mic to dictate).
+
+The browser pad never runs without a password: the first `tally web` or `install-agent --web` generates one and prints it once, and `tally serve --web` sets one itself if it still has none. tally keeps an argon2id hash of the password and hashes of each browser's cookie and each outstanding code in `~/.config/tally/web.json`; failed sign-ins are limited per address and overall.
 
 By default the certificate is Tailscale's Let's Encrypt one for this machine's MagicDNS name, fetched with `tailscale cert` and renewed by tally, so browsers trust it with no warning. That needs MagicDNS and HTTPS certificates turned on in the Tailscale admin console, and on Linux `sudo tailscale set --operator=$USER`. Note that issuing it publishes the machine's `*.ts.net` name in public Certificate Transparency logs. `--web-cert self` uses tally's own certificate instead (browsers warn until it is trusted on the device); `--web-listen` narrows the address.
 

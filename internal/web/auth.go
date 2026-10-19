@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/argon2"
@@ -48,10 +49,24 @@ type Browser struct {
 	LastSeen    time.Time `json:"last_seen"`
 }
 
+// Code is a single-use sign-in code: in a QR code from tally web, or in the
+// URL a browser saves to the home screen. Only its hash is kept.
+type Code struct {
+	SHA256  string    `json:"sha256"`
+	Expires time.Time `json:"expires"`
+}
+
+// Lifetimes of sign-in codes.
+const (
+	QRCodeTTL      = 15 * time.Minute // from tally web: scan it soon
+	InstallCodeTTL = time.Hour        // in the URL a browser adds to the home screen
+)
+
 // State is web.json.
 type State struct {
 	Password string    `json:"password,omitempty"` // argon2id, PHC string format
 	Browsers []Browser `json:"browsers"`
+	Codes    []Code    `json:"codes,omitempty"`
 }
 
 // File is web.json's path.
@@ -74,9 +89,6 @@ func (s Store) Load() (State, error) {
 }
 
 func (s Store) save(st State) error {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
@@ -91,18 +103,139 @@ func (s Store) save(st State) error {
 	return os.Rename(tmp, s.File())
 }
 
-// SetPassword stores a new password and signs every browser out.
-func (s Store) SetPassword(password string) error {
-	if len([]rune(password)) < MinPassword {
-		return fmt.Errorf("use at least %d characters", MinPassword)
+// update reads web.json, applies f and writes the result, holding a lock
+// so tally serve and the tally web CLI never lose each other's writes. f
+// returning an error leaves the file alone.
+func (s Store) update(f func(*State) error) error {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		return err
 	}
+	lock, err := os.OpenFile(filepath.Join(s.Dir, "web.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	st, err := s.Load()
 	if err != nil {
 		return err
 	}
-	st.Password = hashPassword(password)
-	st.Browsers = nil
+	if err := f(&st); err != nil {
+		return err
+	}
 	return s.save(st)
+}
+
+// errUnchanged makes update skip the write.
+var errUnchanged = errors.New("unchanged")
+
+func (s Store) updateMaybe(f func(*State) error) error {
+	if err := s.update(f); err != nil && err != errUnchanged {
+		return err
+	}
+	return nil
+}
+
+// SetPassword stores a new password and signs every browser out, which
+// also voids every sign-in code.
+func (s Store) SetPassword(password string) error {
+	if len([]rune(password)) < MinPassword {
+		return fmt.Errorf("use at least %d characters", MinPassword)
+	}
+	h := hashPassword(password)
+	return s.update(func(st *State) error {
+		st.Password, st.Browsers, st.Codes = h, nil, nil
+		return nil
+	})
+}
+
+// EnsurePassword sets a random password when none is set, so the browser
+// pad never runs without one. It returns the new password, or "" when one
+// was already set.
+func (s Store) EnsurePassword() (string, error) {
+	pw := ""
+	err := s.updateMaybe(func(st *State) error {
+		if st.Password != "" {
+			return errUnchanged
+		}
+		pw = GeneratePassword()
+		st.Password, st.Browsers, st.Codes = hashPassword(pw), nil, nil
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return pw, nil
+}
+
+// GeneratePassword returns 20 random characters from an alphabet without
+// look-alikes, in groups of five: about 100 bits.
+func GeneratePassword() string {
+	const alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+	b := make([]byte, 20)
+	rand.Read(b)
+	var out strings.Builder
+	for i, c := range b {
+		if i > 0 && i%5 == 0 {
+			out.WriteByte('-')
+		}
+		out.WriteByte(alphabet[int(c)%len(alphabet)])
+	}
+	return out.String()
+}
+
+// IssueCode makes a single-use sign-in code valid for ttl and returns it,
+// base64url without padding. Expired codes are dropped as it goes.
+func (s Store) IssueCode(ttl time.Duration, now time.Time) (string, error) {
+	raw := make([]byte, 32)
+	rand.Read(raw)
+	err := s.update(func(st *State) error {
+		st.Codes = append(live(st.Codes, now), Code{SHA256: hash(raw), Expires: now.UTC().Add(ttl).Truncate(time.Second)})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+// RedeemCode uses up a sign-in code. It reports false for an unknown,
+// expired or already used code.
+func (s Store) RedeemCode(code string, now time.Time) (bool, error) {
+	h := TokenHash(code)
+	if h == "" {
+		return false, nil
+	}
+	found := false
+	err := s.update(func(st *State) error {
+		codes := live(st.Codes, now)
+		at := -1
+		for i, c := range codes {
+			if subtle.ConstantTimeCompare([]byte(h), []byte(c.SHA256)) == 1 {
+				at = i
+			}
+		}
+		if at >= 0 {
+			codes = append(codes[:at], codes[at+1:]...)
+			found = true
+		}
+		st.Codes = codes
+		return nil
+	})
+	return found, err
+}
+
+func live(codes []Code, now time.Time) []Code {
+	var kept []Code
+	for _, c := range codes {
+		if now.Before(c.Expires) {
+			kept = append(kept, c)
+		}
+	}
+	return kept
 }
 
 func hashPassword(password string) string {
@@ -144,17 +277,15 @@ func (st State) CheckPassword(password string) bool {
 // SignIn records a new browser and returns its cookie value, base64url
 // without padding. The value is shown to the browser once and never stored.
 func (s Store) SignIn(label, from string, now time.Time) (string, Browser, error) {
-	st, err := s.Load()
-	if err != nil {
-		return "", Browser{}, err
-	}
 	raw := make([]byte, 32)
 	rand.Read(raw)
 	h := hash(raw)
 	now = now.UTC().Truncate(time.Second)
 	b := Browser{ID: h[:8], Label: label, TokenSHA256: h, From: from, Created: now, LastSeen: now}
-	st.Browsers = append(st.Browsers, b)
-	if err := s.save(st); err != nil {
+	if err := s.update(func(st *State) error {
+		st.Browsers = append(st.Browsers, b)
+		return nil
+	}); err != nil {
 		return "", Browser{}, err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), b, nil
@@ -190,69 +321,73 @@ func (st State) Has(tokenSHA256 string) bool {
 // Touch records that a browser was seen, at most once per touchEvery. It
 // reports whether it wrote.
 func (s Store) Touch(tokenSHA256 string, now time.Time) (bool, error) {
-	st, err := s.Load()
-	if err != nil {
-		return false, err
-	}
-	for i, b := range st.Browsers {
-		if b.TokenSHA256 == tokenSHA256 {
-			if now.Sub(b.LastSeen) < touchEvery {
+	if st, err := s.Load(); err == nil { // skip the lock in the common case
+		for _, b := range st.Browsers {
+			if b.TokenSHA256 == tokenSHA256 && now.Sub(b.LastSeen) < touchEvery {
 				return false, nil
 			}
-			st.Browsers[i].LastSeen = now.UTC().Truncate(time.Second)
-			return true, s.save(st)
 		}
 	}
-	return false, nil
+	wrote := false
+	err := s.updateMaybe(func(st *State) error {
+		for i, b := range st.Browsers {
+			if b.TokenSHA256 == tokenSHA256 && now.Sub(b.LastSeen) >= touchEvery {
+				st.Browsers[i].LastSeen = now.UTC().Truncate(time.Second)
+				wrote = true
+				return nil
+			}
+		}
+		return errUnchanged
+	})
+	return wrote, err
 }
 
 // SignOut removes the browser with this token hash, if any.
 func (s Store) SignOut(tokenSHA256 string) error {
-	st, err := s.Load()
-	if err != nil {
-		return err
-	}
-	kept := st.Browsers[:0]
-	for _, b := range st.Browsers {
-		if b.TokenSHA256 != tokenSHA256 {
-			kept = append(kept, b)
+	return s.update(func(st *State) error {
+		kept := st.Browsers[:0]
+		for _, b := range st.Browsers {
+			if b.TokenSHA256 != tokenSHA256 {
+				kept = append(kept, b)
+			}
 		}
-	}
-	st.Browsers = kept
-	return s.save(st)
+		st.Browsers = kept
+		return nil
+	})
 }
 
 // Revoke signs out the browser whose id starts with prefix, or every
 // browser for "all". A running tally serve closes its session within a
 // second.
 func (s Store) Revoke(prefix string) (int, error) {
-	st, err := s.Load()
-	if err != nil {
-		return 0, err
-	}
-	if prefix == "all" {
-		n := len(st.Browsers)
-		st.Browsers = nil
-		return n, s.save(st)
-	}
 	if prefix == "" {
 		return 0, errors.New("give a browser id from tally web --list, or all")
 	}
-	var match []int
-	for i, b := range st.Browsers {
-		if strings.HasPrefix(b.ID, prefix) {
-			match = append(match, i)
+	n := 0
+	err := s.update(func(st *State) error {
+		if prefix == "all" {
+			n = len(st.Browsers)
+			st.Browsers, st.Codes = nil, nil
+			return nil
 		}
-	}
-	switch len(match) {
-	case 0:
-		return 0, fmt.Errorf("no signed-in browser has id %q", prefix)
-	case 1:
-	default:
-		return 0, fmt.Errorf("%q matches %d browsers; give more of the id", prefix, len(match))
-	}
-	st.Browsers = append(st.Browsers[:match[0]], st.Browsers[match[0]+1:]...)
-	return 1, s.save(st)
+		var match []int
+		for i, b := range st.Browsers {
+			if strings.HasPrefix(b.ID, prefix) {
+				match = append(match, i)
+			}
+		}
+		switch len(match) {
+		case 0:
+			return fmt.Errorf("no signed-in browser has id %q", prefix)
+		case 1:
+		default:
+			return fmt.Errorf("%q matches %d browsers; give more of the id", prefix, len(match))
+		}
+		st.Browsers = append(st.Browsers[:match[0]], st.Browsers[match[0]+1:]...)
+		n = 1
+		return nil
+	})
+	return n, err
 }
 
 func hash(raw []byte) string {

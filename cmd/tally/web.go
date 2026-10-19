@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/mdp/qrterminal/v3"
 	"golang.org/x/term"
 
 	"github.com/sroberts/tally/internal/pairing"
@@ -62,15 +64,20 @@ func webCmd(args []string) error {
 		return nil
 	}
 
-	// No flags: say how to reach it.
-	st, err := ws.Load()
+	// No flags: make sure there's a password, then show a sign-in QR code.
+	pw, err := ws.EnsurePassword()
 	if err != nil {
 		return err
 	}
-	if st.Password == "" {
-		fmt.Println("password  not set; run tally web --set-password")
-	} else {
-		fmt.Printf("password  set, %d browser(s) signed in\n", len(st.Browsers))
+	return showWebSignIn(ws, web.Port, pw)
+}
+
+// showWebSignIn prints a QR code of a single-use sign-in link, and pw when
+// the caller just generated it.
+func showWebSignIn(ws web.Store, port int, pw string) error {
+	st, err := ws.Load()
+	if err != nil {
+		return err
 	}
 	name := ""
 	if bin := web.FindTailscale(); bin != "" {
@@ -78,12 +85,35 @@ func webCmd(args []string) error {
 			name = pairing.TailscaleName(out)
 		}
 	}
-	if name != "" {
-		fmt.Printf("open      https://%s:%d/\n", name, web.Port)
-	} else {
-		fmt.Println("open      no MagicDNS name: tailscale is not running here")
+	if name == "" {
+		fmt.Println("tailscale is not running here, so the browser pad has no trusted address.")
+		fmt.Println("start tailscale, then run tally web again.")
+		if pw != "" {
+			fmt.Printf("password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
+		}
+		return nil
 	}
-	fmt.Println("serve it  tally serve --web (or tally install-agent --web)")
+	code, err := ws.IssueCode(web.QRCodeTTL, time.Now())
+	if err != nil {
+		return err
+	}
+	base := fmt.Sprintf("https://%s:%d/", name, port)
+	link := base + "?code=" + code
+	qrterminal.GenerateWithConfig(link, qrterminal.Config{
+		Level: qrterminal.L, Writer: os.Stdout, HalfBlocks: true,
+		BlackChar: qrterminal.BLACK_BLACK, WhiteBlackChar: qrterminal.WHITE_BLACK,
+		WhiteChar: qrterminal.WHITE_WHITE, BlackWhiteChar: qrterminal.BLACK_WHITE,
+		QuietZone: 2,
+	})
+	fmt.Printf("scan with your phone's camera to sign in to the browser pad (works once, for %d minutes).\n", int(web.QRCodeTTL.Minutes()))
+	fmt.Printf("  link      %s\n", link)
+	fmt.Printf("  open      %s\n", base)
+	if pw != "" {
+		fmt.Printf("  password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
+	} else {
+		fmt.Printf("  password  set; %d browser(s) signed in (tally web --list)\n", len(st.Browsers))
+	}
+	fmt.Println("  run tally web again for a fresh code")
 	return nil
 }
 
