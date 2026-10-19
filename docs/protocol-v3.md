@@ -90,3 +90,7 @@ Codes: `N` blocked, `G` done and unseen, `W` working, `R` idle, `U` unknown.
 
 Close statuses: 1008 auth failed or phone revoked, 1009 message too big, 1001 tally stopping or no
 pong.
+
+## The browser pad
+
+`tally serve --web` carries the same protocol to a browser at `wss://<host>:47825/ws`, with one difference: there is no `auth` message. The browser signs in with a password first, and the `__Host-tally` cookie it gets is checked before the upgrade; tally then sends `hello` and `state` and takes actions exactly as above. A browser that is signed out or revoked is closed with status 1008. See `docs/design/browser-pad.md`.

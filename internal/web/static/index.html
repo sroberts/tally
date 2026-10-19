@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="tally">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="light dark">
+<title>tally</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" href="/icon-180.png">
+<link rel="stylesheet" href="/pad.css">
+<script type="module" src="/pad.js"></script>
+</head>
+<body>
+<main id="pad" class="pad">
+  <header class="screen" id="header" role="banner">
+    <div class="row top">
+      <span class="link" id="link"><i></i><span id="link-word">link</span></span>
+      <span class="host" id="host"></span>
+      <span class="space" id="space"></span>
+      <button class="settings" id="settings-open" aria-label="settings">
+        <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true">
+          <path d="M0 .5H16M0 6H16M0 11.5H16" />
+          <rect x="9.7" y="-1" width="3" height="3" /><rect x="3.3" y="4.5" width="3" height="3" /><rect x="7.3" y="10" width="3" height="3" />
+        </svg>
+      </button>
+    </div>
+    <div class="row hero">
+      <span class="readout" aria-hidden="true"><span class="ghost">88</span><span id="hero">--</span></span>
+      <span class="words">
+        <span class="state" id="state">connecting</span>
+        <span class="detail" id="detail"></span>
+      </span>
+      <span class="wait" id="wait"></span>
+    </div>
+    <canvas class="trace" id="trace" aria-hidden="true"></canvas>
+  </header>
+
+  <div class="body">
+    <div class="section"><span class="n">01</span><span class="t">fleet</span><span class="rule"></span><span class="x" id="fleet-trailing"></span></div>
+    <div class="fleet" id="fleet" role="group" aria-label="agents"></div>
+
+    <div class="section"><span class="n">02</span><span class="t">drive</span><span class="rule"></span><span class="x" id="drive-trailing"></span></div>
+    <div class="drive-wrap">
+      <div class="drive" id="drive"></div>
+      <form class="talk" id="talk" hidden>
+        <div class="talk-top"><i></i><span>type or dictate</span><span class="count" id="talk-count">0/4000</span></div>
+        <textarea id="talk-text" maxlength="4000" rows="3" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="send"
+          placeholder="tap the keyboard mic to dictate" aria-label="text for the agent"></textarea>
+        <div class="talk-keys">
+          <button type="button" class="key compact" id="talk-cancel"><span class="legend">cancel</span></button>
+          <button type="submit" class="key compact send" id="talk-send"><span class="legend">type it</span></button>
+        </div>
+        <p class="hint">return types it into the agent · enter sends</p>
+      </form>
+    </div>
+
+    <div class="section"><span class="n">03</span><span class="t">tools</span><span class="rule"></span></div>
+    <div class="tools" id="tools"></div>
+  </div>
+  <div class="alert" id="alert" hidden></div>
+</main>
+
+<section class="sheet" id="settings" hidden aria-label="settings">
+  <div class="strip"><span class="code">set</span><span class="t">settings</span><button id="settings-close" class="done">done</button></div>
+  <div class="module">
+    <div class="mhead"><span class="n">01</span><span class="t">host</span></div>
+    <dl class="spec">
+      <div><dt>host</dt><dd id="s-host">-</dd></div>
+      <div><dt>tally</dt><dd id="s-version">-</dd></div>
+      <div><dt>via</dt><dd id="s-via">-</dd></div>
+      <div><dt>link</dt><dd id="s-link">-</dd></div>
+    </dl>
+  </div>
+  <div class="module">
+    <div class="mhead"><span class="n">02</span><span class="t">screen</span></div>
+    <label class="toggle"><input type="checkbox" id="s-awake"><i></i><span>keep awake while live</span></label>
+    <p class="note" id="s-awake-note"></p>
+  </div>
+  <div class="module">
+    <div class="mhead"><span class="n">03</span><span class="t">this browser</span></div>
+    <p class="note">signed in with tally's web password. tally web --list shows every signed-in browser; tally web --revoke signs one out.</p>
+    <form method="post" action="/logout"><button class="key compact wide" type="submit"><span class="legend">sign out</span></button></form>
+  </div>
+</section>
+</body>
+</html>

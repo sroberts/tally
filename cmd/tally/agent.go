@@ -43,6 +43,9 @@ func installAgent(args []string) error {
 	remoteOn := fs.Bool("remote", false, "also serve paired phones (tally serve --remote)")
 	listen := fs.String("listen", "", "address for --remote (default :47824)")
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
+	webOn := fs.Bool("web", false, "also serve the browser pad (tally serve --web)")
+	webListen := fs.String("web-listen", "", "address for --web (default :47825)")
+	webCert := fs.String("web-cert", "", "certificate for --web: tailscale (default) or self")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -66,6 +69,15 @@ func installAgent(args []string) error {
 	}
 	if *listen != "" {
 		serveArgs = append(serveArgs, "--listen", *listen)
+	}
+	if *webOn {
+		serveArgs = append(serveArgs, "--web")
+	}
+	if *webListen != "" {
+		serveArgs = append(serveArgs, "--web-listen", *webListen)
+	}
+	if *webCert != "" {
+		serveArgs = append(serveArgs, "--web-cert", *webCert)
 	}
 	if *noDevice {
 		serveArgs = append(serveArgs, "--no-device")
