@@ -3,7 +3,8 @@
 // serve keeps the MacroPad's lights in step with herdr and, with --remote,
 // serves the iPhone soft pad; status reads herdr once and shows the slot
 // each agent maps to; frame sends a hand-written frame to the pad; act runs
-// one soft pad action; pair pairs a phone; install-agent runs serve at
+// one soft pad action; pair pairs a phone; web sets the browser pad's
+// password and lists signed-in browsers; install-agent runs serve at
 // login; doctor checks the setup.
 package main
 
@@ -21,16 +22,22 @@ import (
 const usage = `usage: tally <command> [arguments]
 
 commands:
-  serve [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N] [--verbose]
+  serve [--remote] [--listen ADDR] [--web] [--web-listen ADDR] [--web-cert tailscale|self]
+        [--no-device] [--port PATH] [--slots N] [--verbose]
                                    keep the MacroPad's lights in step with herdr;
-                                   --remote also serves paired phones on :47824
+                                   --remote also serves paired phones on :47824,
+                                   --web serves the browser pad over HTTPS on :47825
   status [--json] [--slots N]      show herdr's agents in slot order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
                                    run one soft pad action against herdr
   pair [--label NAME] [--json] | --list | --revoke NAME
                                    pair a phone (prints a QR code), list or revoke phones
-  install-agent [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N]
+  web [--set-password [--password-stdin]] | --list | --revoke ID|all
+                                   set the browser pad's password, list or sign out browsers;
+                                   with no flags, show where to open it
+  install-agent [--remote] [--listen ADDR] [--web] [--web-listen ADDR] [--web-cert MODE]
+                [--no-device] [--port PATH] [--slots N]
                                    run tally serve at login (LaunchAgent or systemd unit), and now
   uninstall-agent                  stop and remove the background agent
   doctor                           check herdr, its settings, the agent, the pad and the remote listener
@@ -53,6 +60,8 @@ func main() {
 		err = act(os.Args[2:])
 	case "pair":
 		err = pair(os.Args[2:])
+	case "web":
+		err = webCmd(os.Args[2:])
 	case "install-agent":
 		err = installAgent(os.Args[2:])
 	case "uninstall-agent":

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/remote"
 	"github.com/sroberts/tally/internal/slots"
+	"github.com/sroberts/tally/internal/web"
 )
 
 // version is tally's version, sent to phones in hello.
@@ -32,6 +34,9 @@ func serve(args []string) error {
 	remoteOn := fs.Bool("remote", false, "serve paired phones (the soft pad) over TLS WebSocket")
 	listen := fs.String("listen", fmt.Sprintf(":%d", pairing.Port), "address for --remote, e.g. 100.101.102.103:47824 for Tailscale only")
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
+	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
+	webListen := fs.String("web-listen", fmt.Sprintf(":%d", web.Port), "address for --web")
+	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (this machine's MagicDNS name) or self (tally's own; browsers warn)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -44,7 +49,10 @@ func serve(args []string) error {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	log.Info("tally serve", "herdr", path, "slots", cfg.Slots, "remote", *remoteOn, "device", !*noDevice)
+	log.Info("tally serve", "herdr", path, "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
+	if *webCert != "tailscale" && *webCert != "self" {
+		return fmt.Errorf("--web-cert must be tailscale or self, not %q", *webCert)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -73,12 +81,34 @@ func serve(args []string) error {
 	reader := herdr.New(path)
 	d := daemon.New(cfg, reader, emit, log)
 
-	if *remoteOn {
-		srv, err := newRemote(path, reader, cfg.Slots, *listen, log)
-		if err != nil {
+	var srv *remote.Server
+	if *remoteOn || *webOn {
+		if srv, err = newRemote(path, reader, cfg.Slots, *listen, log); err != nil {
 			return err
 		}
 		d.OnUpdate(srv.Publish)
+	}
+	if *webOn {
+		ws, err := newWeb(ctx, &wg, srv, *webCert, log)
+		if err != nil {
+			return err
+		}
+		ln, err := net.Listen("tcp", *webListen)
+		if err != nil {
+			return fmt.Errorf("web listener: %w", err)
+		}
+		log.Info("web listener", "addr", ln.Addr().String())
+		// So tally web and tally doctor know where to find it.
+		if err := (web.Store{Dir: ws.Dir()}).SetServing(&web.Serving{Listen: *webListen, Cert: *webCert}); err != nil {
+			log.Warn("web.json", "err", err)
+		}
+		wg.Go(func() {
+			if err := ws.Serve(ctx, ln); err != nil {
+				log.Error("web listener stopped", "err", err)
+			}
+		})
+	}
+	if *remoteOn {
 		ln, err := net.Listen("tcp", *listen)
 		if err != nil {
 			return fmt.Errorf("remote listener: %w", err)
@@ -95,6 +125,36 @@ func serve(args []string) error {
 	wg.Wait()
 	log.Info("tally serve stopped")
 	return nil
+}
+
+// newWeb builds the browser pad's server on srv's sessions and starts
+// keeping its certificate fresh.
+func newWeb(ctx context.Context, wg *sync.WaitGroup, srv *remote.Server, certMode string, log *slog.Logger) (*web.Server, error) {
+	store, err := pairing.DefaultStore()
+	if err != nil {
+		return nil, err
+	}
+	ws := web.Store{Dir: store.Dir}
+	// Never serve without a password. A generated one isn't logged: tally
+	// web prints a sign-in QR code, and --set-password picks your own.
+	if pw, err := ws.EnsurePassword(); err != nil {
+		return nil, err
+	} else if pw != "" {
+		log.Info("set a random browser pad password; run tally web for a sign-in QR code")
+	}
+	var certs web.Certs
+	if certMode == "self" {
+		cert, _, err := store.Certificate(pairing.HostName())
+		if err != nil {
+			return nil, err
+		}
+		certs = web.Static{Cert: cert}
+	} else {
+		ts := &web.Tailscale{Dir: filepath.Join(store.Dir, "web"), Bin: web.FindTailscale(), Log: log}
+		wg.Go(func() { ts.Run(ctx) })
+		certs = ts
+	}
+	return web.New(web.Config{Store: ws, Remote: srv, Certs: certs, Log: log}), nil
 }
 
 // newRemote builds the soft pad's server. It is the only place a herdr

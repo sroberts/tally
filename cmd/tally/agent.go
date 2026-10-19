@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/sroberts/tally/internal/launchd"
 	"github.com/sroberts/tally/internal/slots"
 	"github.com/sroberts/tally/internal/systemd"
+	"github.com/sroberts/tally/internal/web"
 )
 
 func runCmd(name string, args ...string) ([]byte, error) {
@@ -43,6 +45,9 @@ func installAgent(args []string) error {
 	remoteOn := fs.Bool("remote", false, "also serve paired phones (tally serve --remote)")
 	listen := fs.String("listen", "", "address for --remote (default :47824)")
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
+	webOn := fs.Bool("web", false, "also serve the browser pad (tally serve --web)")
+	webListen := fs.String("web-listen", "", "address for --web (default :47825)")
+	webCert := fs.String("web-cert", "", "certificate for --web: tailscale (default) or self")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -67,6 +72,15 @@ func installAgent(args []string) error {
 	if *listen != "" {
 		serveArgs = append(serveArgs, "--listen", *listen)
 	}
+	if *webOn {
+		serveArgs = append(serveArgs, "--web")
+	}
+	if *webListen != "" {
+		serveArgs = append(serveArgs, "--web-listen", *webListen)
+	}
+	if *webCert != "" {
+		serveArgs = append(serveArgs, "--web-cert", *webCert)
+	}
 	if *noDevice {
 		serveArgs = append(serveArgs, "--no-device")
 	}
@@ -78,12 +92,48 @@ func installAgent(args []string) error {
 			env[k] = v
 		}
 	}
+	// Set the password here, not in the agent, so this command can show it.
+	ws := web.Store{Dir: filepath.Join(home, ".config", "tally")}
+	pw := ""
+	if *webOn {
+		if pw, err = ws.EnsurePassword(); err != nil {
+			return err
+		}
+	}
 	runs := strings.Join(append([]string{program, "serve"}, serveArgs...), " ")
 	if runtime.GOOS == "linux" {
-		return installUnit(systemd.Agent{Program: program, Args: serveArgs, Env: env}, home, runs)
+		err = installUnit(systemd.Agent{Program: program, Args: serveArgs, Env: env}, home, runs)
+	} else {
+		err = installLaunchd(launchd.Agent{Program: program, Args: serveArgs, Env: env}, home, runs)
 	}
+	if err != nil || !*webOn {
+		return err
+	}
+	serving := web.Serving{Listen: *webListen, Cert: *webCert}
+	if serving.Listen == "" {
+		serving.Listen = fmt.Sprintf(":%d", web.Port)
+	}
+	if serving.Cert == "" {
+		serving.Cert = "tailscale"
+	}
+	if err := ws.SetServing(&serving); err != nil {
+		return err
+	}
+	fmt.Println()
+	return showWebSignIn(ws, pw)
+}
 
-	a := launchd.Agent{Program: program, Args: serveArgs, Env: env}
+// listenPort is addr's port, or def when addr is empty or has none.
+func listenPort(addr string, def int) int {
+	if _, p, err := net.SplitHostPort(addr); err == nil {
+		if n, err := strconv.Atoi(p); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func installLaunchd(a launchd.Agent, home, runs string) error {
 	plist, err := launchd.Install(a, home, runCmd)
 	if err != nil {
 		return err

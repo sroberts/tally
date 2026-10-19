@@ -219,7 +219,7 @@ func (s *Server) watchRevocations(ctx context.Context) {
 		s.mu.Lock()
 		var gone []*session
 		for ss := range s.sessions {
-			if !st.Has(ss.tokenHash) {
+			if ss.tokenHash != "" && !st.Has(ss.tokenHash) { // "" is a browser; package web revokes those
 				gone = append(gone, ss)
 			}
 		}
@@ -256,6 +256,16 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	ss := &session{s: s, conn: conn, label: label, tokenHash: hash, wake: make(chan struct{}, 1)}
 	err = ss.run(r.Context())
 	s.cfg.Log.Info("phone disconnected", "phone", label, "err", err)
+}
+
+// Attach runs a session for a client that authenticated some other way:
+// the browser pad, which signs in with a password and a cookie. It skips
+// the auth message and starts with hello. The caller closes conn when the
+// client's sign-in is revoked; watchRevocations leaves these sessions alone.
+func (s *Server) Attach(ctx context.Context, conn *websocket.Conn, label string) error {
+	conn.SetReadLimit(MaxMessage)
+	ss := &session{s: s, conn: conn, label: label, wake: make(chan struct{}, 1)}
+	return ss.run(ctx)
 }
 
 // auth reads the first message, which must be a valid auth within

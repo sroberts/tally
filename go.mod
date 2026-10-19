@@ -8,6 +8,7 @@ require (
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	go.bug.st/serial v1.8.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/term v0.47.0
 )
 

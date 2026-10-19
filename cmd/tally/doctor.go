@@ -30,6 +30,7 @@ func doctorCmd(args []string) error {
 		Fix:    "if keys and the sidebar disagree, clear any plugin that reorders the Agents view",
 	}, agentResult, checkPad(agent)}
 	results = append(results, checkRemote()...)
+	results = append(results, checkWeb()...)
 
 	failed := false
 	for _, r := range results {

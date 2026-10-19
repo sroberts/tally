@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="tally">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="light dark">
+<title>tally · sign in</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" href="/icon-180.png">
+<link rel="stylesheet" href="/pad.css">
+</head>
+<body>
+<main class="login">
+  <header class="screen">
+    <span class="brand">tally</span>
+    <span class="sub">browser pad · sign in</span>
+  </header>
+  <form method="post" action="/login">
+    <input class="username" name="username" type="text" value="tally" autocomplete="username" tabindex="-1" aria-hidden="true">
+    <label for="password">password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    <button class="key" type="submit"><span class="legend">sign in</span></button>
+  </form>
+  <p class="hint">set or change the password on the host with tally web --set-password.</p>
+</main>
+</body>
+</html>
