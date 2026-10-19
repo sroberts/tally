@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tally · a control pad for Claude Code agents</title>
+<meta name="description" content="See which Claude Code agent needs you, then approve, interrupt or dictate to it from your phone, without switching windows.">
+<meta property="og:title" content="tally">
+<meta property="og:description" content="A phone and hardware control pad for your Claude Code agents in herdr.">
+<meta property="og:image" content="https://sroberts.github.io/tally/social-preview.png">
+<meta property="og:url" content="https://sroberts.github.io/tally/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0f0e12">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230f0e12'/%3E%3Crect x='3' y='3' width='4' height='4' fill='%23fab413'/%3E%3Crect x='9' y='3' width='4' height='4' fill='%230071bb'/%3E%3Crect x='3' y='9' width='4' height='4' fill='%231e8a4c'/%3E%3Crect x='9' y='9' width='4' height='4' fill='%23a1a7af'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="bar">
+  <a class="mark" href="#top"><span class="dot"></span>tally</a>
+  <nav>
+    <a href="#how">how</a>
+    <a href="#install">install</a>
+    <a href="https://github.com/sroberts/tally">github</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="hero-text">
+    <p class="label">control pad for claude code agents</p>
+    <h1>see which agent<br>needs <em>you</em>.</h1>
+    <p class="lede">Running several Claude Code agents means constantly checking which one is waiting on you. tally puts your <a href="https://herdr.dev">herdr</a> agents on a pad on your phone: one glance shows who's blocked, and one tap approves, interrupts or dictates to them, without switching windows.</p>
+    <div class="cmd" data-copy="go install github.com/sroberts/tally@latest">
+      <code><span class="prompt">$</span> go install github.com/sroberts/tally@latest</code>
+      <button type="button" aria-label="copy the install command">copy</button>
+    </div>
+    <p class="links"><a class="btn" href="#install">get started</a><a class="btn ghost" href="https://github.com/sroberts/tally/releases/latest">download a release</a></p>
+  </div>
+  <figure class="hero-pad">
+    <img src="browser-pad.png" width="390" height="844" alt="The browser pad on a phone: six agent tiles, a2 needs approval and its yes, always and no keys are lit amber">
+  </figure>
+</section>
+
+<section id="how" class="module">
+  <h2><span class="num">01</span> how it works</h2>
+  <div class="grid three">
+    <div class="cell">
+      <h3>see</h3>
+      <p>Six tiles mirror herdr's agent sidebar. An agent that needs you pulses amber with how long it has waited; <b>attn</b> jumps to whoever has waited longest.</p>
+    </div>
+    <div class="cell">
+      <h3>act</h3>
+      <p>Twelve keys drive the focused agent: approve once or always, deny, interrupt, switch mode, rewind, compact. Keys light only when they matter right now.</p>
+    </div>
+    <div class="cell">
+      <h3>talk</h3>
+      <p>Type or dictate a prompt with your phone's keyboard mic and it lands in the agent you're looking at. Press <b>enter</b> on the pad to send it.</p>
+    </div>
+  </div>
+  <p class="note">tally runs in the background next to herdr and acts on agents through herdr's socket, not by faking keystrokes, so it works while your editor or browser has focus. It works the same on macOS and Linux.</p>
+</section>
+
+<section class="module">
+  <h2><span class="num">02</span> agent states</h2>
+  <div class="states">
+    <div class="state"><span class="sw amber pulse"></span><b>needs you</b><span>a permission prompt or question is waiting</span></div>
+    <div class="state"><span class="sw green"></span><b>done</b><span>finished a turn you haven't looked at</span></div>
+    <div class="state"><span class="sw blue breathe"></span><b>working</b><span>running</span></div>
+    <div class="state"><span class="sw gray"></span><b>ready</b><span>idle, and you've seen its result</span></div>
+    <div class="state"><span class="sw faint"></span><b>unknown</b><span>herdr can't tell yet</span></div>
+  </div>
+</section>
+
+<section id="install" class="module">
+  <h2><span class="num">03</span> get started</h2>
+  <ol class="steps">
+    <li>
+      <h3>install tally</h3>
+      <p>Needs <a href="https://go.dev/dl/">Go</a> 1.27+ and a running <a href="https://herdr.dev">herdr</a>. Or grab a binary for macOS or Linux from <a href="https://github.com/sroberts/tally/releases/latest">releases</a>.</p>
+      <div class="cmd" data-copy="go install github.com/sroberts/tally@latest"><code><span class="prompt">$</span> go install github.com/sroberts/tally@latest</code><button type="button" aria-label="copy">copy</button></div>
+    </li>
+    <li>
+      <h3>set up tailscale</h3>
+      <p>Put <a href="https://tailscale.com">Tailscale</a> on the machine running herdr and on your phone. In the admin console, turn on <b>MagicDNS</b> and <b>HTTPS certificates</b>. tally fetches and renews its certificate itself.</p>
+    </li>
+    <li>
+      <h3>start it</h3>
+      <p>This runs tally in the background, now and at login, sets a password and prints a sign-in QR code.</p>
+      <div class="cmd" data-copy="tally install-agent --web"><code><span class="prompt">$</span> tally install-agent --web</code><button type="button" aria-label="copy">copy</button></div>
+    </li>
+    <li>
+      <h3>scan and add to home screen</h3>
+      <p>Scan the code with your phone's camera to open the pad already signed in, then add it to your home screen when it offers. It runs full screen and stays signed in.</p>
+    </li>
+  </ol>
+  <p class="note">Something off? <code>tally doctor</code> checks herdr, the background agent, the certificate and the pad. The full guide is in the <a href="https://github.com/sroberts/tally#readme">README</a>.</p>
+</section>
+
+<section class="module">
+  <h2><span class="num">04</span> private by design</h2>
+  <div class="grid two">
+    <ul class="ticks">
+      <li>Your agents' titles, paths and terminal output never leave your machine. The pad sees only each agent's state.</li>
+      <li>Keys reach agent panes only, through a fixed allowlist of herdr calls. Nothing is ever retried.</li>
+    </ul>
+    <ul class="ticks">
+      <li>HTTPS only, always behind a password (argon2id). Single-use QR sign-in codes; the password never goes in a URL.</li>
+      <li>Revoke any browser from the terminal and its pad closes within a second.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="module">
+  <h2><span class="num">05</span> on your desk too</h2>
+  <div class="hw">
+    <img src="macropad.jpg" width="1000" height="1333" loading="lazy" alt="The vibe-macropad: an Adafruit MacroPad with twelve lit keys and an OLED">
+    <div>
+      <p>Prefer a physical button? <a href="https://github.com/sroberts/vibe-macropad">vibe-macropad</a> turns an Adafruit MacroPad RP2040 into the same pad: keys light by the same states, and its OLED shows who's waiting. Plug it in and tally finds it, alongside the browser pad or on its own.</p>
+      <p><a class="btn ghost" href="https://github.com/sroberts/vibe-macropad">vibe-macropad on github</a></p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="bar foot">
+  <span>tally · MIT license</span>
+  <nav>
+    <a href="https://github.com/sroberts/tally">source</a>
+    <a href="https://github.com/sroberts/tally/discussions">discussions</a>
+    <a href="https://github.com/sroberts/tally/blob/main/SECURITY.md">security</a>
+    <a href="https://herdr.dev">herdr</a>
+  </nav>
+</footer>
+
+<script>
+  for (const box of document.querySelectorAll(".cmd")) {
+    const button = box.querySelector("button");
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(box.dataset.copy);
+        button.textContent = "copied";
+      } catch {
+        button.textContent = "select it";
+      }
+      setTimeout(() => { button.textContent = "copy"; }, 1500);
+    });
+  }
+</script>
+</body>
+</html>
