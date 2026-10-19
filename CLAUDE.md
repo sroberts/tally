@@ -6,7 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 tally is the Go host daemon shared by its clients: the hardware MacroPad (repo `vibe-macropad`, serial protocol v2, the pad types through USB HID) and remote clients: paired phones over TLS WebSocket protocol v3 and the browser pad, whose actions tally executes against herdr. All clients run off the same actor and snapshot logic. Read `docs/design/tally-macropad.md` before daemon work, `docs/design/remote.md` before remote/actions work and `docs/design/browser-pad.md` before web work.
 
-Work follows GitHub Flow: branch, PR, merge commit on GitHub. Local hooks block commits and pushes on `main`.
+Workflow, commands, testing and the rules every change keeps are in `docs/developer.md`, imported here:
+
+@docs/developer.md
+
+The README is for users; keep development detail in `docs/developer.md`.
 
 ## Packages
 
@@ -23,34 +27,10 @@ Work follows GitHub Flow: branch, PR, merge commit on GitHub. Local hooks block 
 - `internal/systemd` is the Linux counterpart of `internal/launchd` (a user unit, `Restart=always`).
 - `cmd/tally` is the CLI.
 
-## Invariants
-
-- The serial path stays read-only. Only `tally serve --remote`/`--web` and `tally act` construct the herdr writer.
-- Actions are never retried. Nothing is accepted from a phone before auth, or from a browser before sign-in.
-- No titles, cwds or terminal output leave the host or reach a log line.
-- The v2 serial frame stays byte-compatible with the pad firmware in `vibe-macropad`; protocol changes for the phone go in v3 only.
-
-## Commands
-
-```bash
-go test ./...
-go test ./internal/device -run TestHandshake
-go build -o ~/.local/bin/tally ./cmd/tally
-tally status                         # herdr's agents in slot order
-tally serve                          # Ctrl-C stops
-tally install-agent                  # LaunchAgent (log: ~/Library/Logs/tally.log)
-tally doctor
-tally status --json | tally frame -  # light the pad from live herdr state, once
-tally act submit --dry-run           # print an action's herdr calls without making them
-tally pair --json                    # pair a phone; --json also prints the payload as text
-tally serve --remote --no-device --listen 127.0.0.1:47999   # a remote listener beside the real one
-tally serve --web --web-cert self --no-device --web-listen 127.0.0.1:47899   # a browser pad beside the real one
-```
-
-`go test ./internal/remote` runs the listener in-process against a fake writer; the Bonjour test needs multicast (`-short` skips it). To try a live listener without touching your pairing, set `HOME` to a scratch directory for both `tally pair` and `tally serve` (and `tally web --set-password --password-stdin`), with `HERDR_SOCKET_PATH` pointing at the real socket. `go test ./internal/web` runs the browser pad in-process and runs `lighting_test.mjs` when node is installed.
-
-`testdata/snapshots/` holds captured `session.snapshot` responses with every private string replaced by a `SECRET-` marker; the decoder test fails if one survives.
+## Notes for Claude
 
 In this sandbox git can't read `~/.gitconfig`; prefix git (and `go build`, which stamps VCS info) with `GIT_CONFIG_GLOBAL=/dev/null`.
 
 Never send keys to live herdr panes from tests or while developing: the user's real agents run there. Test writes against a fake writer, or a scratch tab you create and close.
+
+Push, open PRs or merge only when the user asks; merges are merge commits.
