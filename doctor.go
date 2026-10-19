@@ -110,12 +110,13 @@ func checkAgent() (launchd.State, doctor.Result) {
 
 // checkPad looks for the pad's data port. tally serve opens the port
 // exclusively, so while it runs the port is busy rather than answering.
+// The hardware pad is optional, so no pad at all is only informational.
 func checkPad(agent launchd.State) doctor.Result {
 	r := doctor.Result{Name: "pad"}
 	running := agent.State == "running"
 	paths, err := device.Candidates()
 	if err != nil || len(paths) == 0 {
-		r.Level, r.Detail, r.Fix = doctor.Fail, "no Adafruit USB serial port found", "plug in the MacroPad"
+		r.Level, r.Detail = doctor.Info, "no MacroPad plugged in (optional; the browser pad works without it)"
 		return r
 	}
 	busy := ""

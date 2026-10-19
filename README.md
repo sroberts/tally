@@ -1,11 +1,11 @@
 # tally
 
-tally watches [herdr](https://herdr.dev)'s Claude Code agents and keeps your pads in step with them. It runs in the background on the machine where herdr runs and drives two pads:
+tally puts your [herdr](https://herdr.dev) Claude Code agents on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It runs in the background on the machine where herdr runs.
 
-- **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, the hardware pad. Its keys light by each agent's state.
-- **The browser pad**, a pad for your phone's home screen. It shows the same state, and its keys act on your agents directly.
+- **The browser pad** is the main way to use it: a pad on your phone's home screen, served by tally over HTTPS behind a password.
+- **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, an Adafruit MacroPad on your desk, is optional. Its keys light by the same states, and it can run alongside the browser pad.
 
-Use either one or both at once.
+<img src="docs/browser-pad.png" alt="The browser pad on a phone: six agent tiles, with a2 needing approval and its yes, always and no keys lit" width="300">
 
 ## Install
 
@@ -25,24 +25,17 @@ echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc   # or ~/.bashrc; th
 
 ## Start it
 
-**Hardware pad only** ([vibe-macropad](https://github.com/sroberts/vibe-macropad), plugged in over USB):
+Set up [Tailscale](#set-up-tailscale) first, then:
 
 ```bash
-tally install-agent   # runs tally in the background, now and at login
-tally doctor          # checks herdr, the background agent and the pad
-```
-
-**With the browser pad:** set up [Tailscale](https://tailscale.com) first (below), then:
-
-```bash
-tally install-agent --web
+tally install-agent --web   # runs tally in the background, now and at login
 ```
 
 This prints a generated password once and a QR code. Scan the code with your phone's camera to open the pad already signed in.
 
-## The browser pad
+Using only the [hardware pad](#the-hardware-pad)? Plug it in and run `tally install-agent` without `--web`.
 
-<img src="docs/browser-pad.png" alt="The browser pad on a phone: six agent tiles, with a2 needing approval and its yes, always and no keys lit" width="300">
+## The browser pad
 
 ### Set up Tailscale
 
@@ -78,13 +71,19 @@ The pad always has a password, and the password never goes in a URL. Repeated wr
 
 Getting the Tailscale certificate publishes the machine's `*.ts.net` name in public Certificate Transparency logs. To avoid that, add `--web-cert self` to use tally's own certificate instead; browsers warn until you trust it on the device. `--web-listen ADDR` narrows where the pad listens (default `:47825`).
 
+## The hardware pad
+
+[vibe-macropad](https://github.com/sroberts/vibe-macropad) is an Adafruit MacroPad RP2040 with its own firmware. Plug it in over USB and tally finds it on its own, with or without `--web`. Its six agent keys and DRIVE keys light by the same rules as the browser pad, and its OLED shows the focused agent's state. It types into your agents through USB, so it acts on whichever window has focus; the browser pad acts on the agent directly.
+
+If you never use the hardware pad, `--no-device` stops tally looking for it.
+
 ## Commands
 
 | Command | Does |
 | --- | --- |
 | `tally install-agent [--web]` | Run tally in the background, now and at login |
 | `tally uninstall-agent` | Stop and remove the background agent |
-| `tally doctor` | Check herdr, the background agent, the pad and the browser pad |
+| `tally doctor` | Check herdr, the background agent, the browser pad and the hardware pad |
 | `tally status` | List herdr's agents in slot order |
 | `tally web` | Show a sign-in QR code for the browser pad |
 | `tally serve [--web]` | Run tally in this terminal instead of the background |
@@ -93,13 +92,19 @@ Getting the Tailscale certificate publishes the machine's `*.ts.net` name in pub
 
 ## Agent states
 
-| Code | Means |
-| --- | --- |
-| `N` | Needs you: a permission prompt or question is waiting |
-| `G` | Done: finished a turn you haven't looked at |
-| `W` | Working |
-| `R` | Ready: idle, and you've seen its result |
-| `U` | Unknown: herdr can't tell yet |
+Each agent is in one of five states. The pads share one palette, where ochre always means "needs you". herdr's sidebar uses its theme's colors and the dot or symbol set by `ui.status_indicators` (dots by default, `symbols` for the second icon).
+
+| State | Means | Browser pad | herdr sidebar | Hardware pad |
+| --- | --- | --- | --- | --- |
+| **Needs you** (`N`) | A permission prompt or question is waiting | Ochre tile, pulsing, with the wait time; **attn** pulses. Focused: **yes**, **always** and **no** pulse, **esc** lights red | Red `●` / `×`, "blocked" | Ochre key, pulsing |
+| **Done** (`G`) | Finished a turn you haven't looked at | Green tile. Focused: **enter** lights green | Teal `●` / `✓`, "done" | Green key |
+| **Working** (`W`) | Running | Blue tile, breathing. Focused: **esc** lights red, **bg** blue | Yellow `●` / `◐`, "working" | Blue key, breathing |
+| **Ready** (`R`) | Idle, and you've seen its result | Gray tile. Focused: **enter** lights green | Green `○`, "idle" | Dim gray key |
+| **Unknown** (`U`) | herdr can't tell yet | Dimmer gray tile | Gray `·`, "idle" | Dimmer gray key |
+
+An empty slot shows `—` on the browser pad and an unlit key on the hardware pad. The focused agent's tile has a white outline, and the others sit at 60%. DRIVE keys light by the focused agent's state, so the keys that matter right now stand out. When the link to tally drops, the tiles dim and the header says why.
+
+`tally status` and the protocol docs use the one-letter codes.
 
 ## Contributing
 

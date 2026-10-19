@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-tally is the Go host daemon shared by its clients: the hardware MacroPad (repo `vibe-macropad`, serial protocol v2, the pad types through USB HID) and remote clients: paired phones over TLS WebSocket protocol v3 and the browser pad, whose actions tally executes against herdr. All clients run off the same actor and snapshot logic. Read `docs/design/tally-macropad.md` before daemon work, `docs/design/remote.md` before remote/actions work and `docs/design/browser-pad.md` before web work.
+tally is the Go host daemon shared by its clients: the hardware MacroPad (repo `vibe-macropad`, serial protocol v2, the pad types through USB HID) and remote clients: paired phones over TLS WebSocket protocol v3 and the browser pad, whose actions tally executes against herdr. All clients run off the same actor and snapshot logic. The browser pad is the primary client and the hardware pad is optional: user docs lead with the browser pad, and nothing should treat a missing MacroPad as an error. Read `docs/design/tally-macropad.md` before daemon work, `docs/design/remote.md` before remote/actions work and `docs/design/browser-pad.md` before web work.
 
 Workflow, commands, testing and the rules every change keeps are in `docs/developer.md`, imported here:
 
