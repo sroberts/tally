@@ -14,6 +14,9 @@ func WebListener(probeErr error, port int) Result {
 	case probeErr != nil && strings.Contains(probeErr.Error(), "refused"):
 		r.Level, r.Detail = Info, fmt.Sprintf("nothing listening on :%d, so the browser pad is off", port)
 		r.Fix = "tally install-agent --web (or tally serve --web)"
+	case NoCertificate(probeErr):
+		r.Level, r.Detail = Warn, fmt.Sprintf("listening on :%d but has no certificate yet, so every handshake fails", port)
+		r.Fix = "see web cert below"
 	case probeErr != nil:
 		r.Level, r.Detail = Fail, fmt.Sprintf(":%d answered but not as tally's browser pad: %v", port, probeErr)
 		r.Fix = "stop whatever else holds the port, then tally install-agent --web"
@@ -21,6 +24,17 @@ func WebListener(probeErr error, port int) Result {
 		r.Level, r.Detail = OK, fmt.Sprintf("browser pad listening on :%d over HTTPS", port)
 	}
 	return r
+}
+
+// NoCertificate reports whether a probe of the browser pad failed in the
+// TLS handshake, as it does before tally has a certificate to present.
+func NoCertificate(probeErr error) bool {
+	if probeErr == nil {
+		return false
+	}
+	e := probeErr.Error()
+	return strings.Contains(e, "tls: internal error") || strings.Contains(e, "tls: unrecognized name") ||
+		strings.Contains(e, "handshake failure")
 }
 
 // WebPassword reports whether the browser pad has a password and how many

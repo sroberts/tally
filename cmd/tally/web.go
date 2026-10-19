@@ -69,16 +69,27 @@ func webCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	return showWebSignIn(ws, web.Port, pw)
+	return showWebSignIn(ws, pw)
+}
+
+// webServing is how tally serve --web last said it listens, or the
+// defaults.
+func webServing(st web.State) web.Serving {
+	if st.Serving != nil {
+		return *st.Serving
+	}
+	return web.Serving{Listen: fmt.Sprintf(":%d", web.Port), Cert: "tailscale"}
 }
 
 // showWebSignIn prints a QR code of a single-use sign-in link, and pw when
 // the caller just generated it.
-func showWebSignIn(ws web.Store, port int, pw string) error {
+func showWebSignIn(ws web.Store, pw string) error {
 	st, err := ws.Load()
 	if err != nil {
 		return err
 	}
+	serving := webServing(st)
+	port := listenPort(serving.Listen, web.Port)
 	name := ""
 	if bin := web.FindTailscale(); bin != "" {
 		if out, err := runCmd(bin, "status", "--json"); err == nil {
@@ -112,6 +123,9 @@ func showWebSignIn(ws web.Store, port int, pw string) error {
 		fmt.Printf("  password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
 	} else {
 		fmt.Printf("  password  set; %d browser(s) signed in (tally web --list)\n", len(st.Browsers))
+	}
+	if serving.Cert == "self" {
+		fmt.Println("  tally serves its own certificate (--web-cert self), so the browser warns until you trust it on the device")
 	}
 	fmt.Println("  run tally web again for a fresh code")
 	return nil

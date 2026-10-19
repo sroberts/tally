@@ -54,19 +54,33 @@ type Browser struct {
 type Code struct {
 	SHA256  string    `json:"sha256"`
 	Expires time.Time `json:"expires"`
+	Issuer  string    `json:"issuer,omitempty"` // the token hash of the browser that asked for it; "" for tally web
 }
 
 // Lifetimes of sign-in codes.
 const (
-	QRCodeTTL      = 15 * time.Minute // from tally web: scan it soon
-	InstallCodeTTL = time.Hour        // in the URL a browser adds to the home screen
+	QRCodeTTL       = 15 * time.Minute // from tally web: scan it soon
+	InstallCodeTTL  = time.Hour        // in the URL a browser adds to the home screen
+	maxInstallCodes = 3                // live install codes per browser; older ones are dropped
 )
+
+// errPasswordChanged refuses a sign-in checked against a password that has
+// since been replaced.
+var errPasswordChanged = errors.New("the password changed during sign-in")
 
 // State is web.json.
 type State struct {
 	Password string    `json:"password,omitempty"` // argon2id, PHC string format
 	Browsers []Browser `json:"browsers"`
 	Codes    []Code    `json:"codes,omitempty"`
+	Serving  *Serving  `json:"serving,omitempty"`
+}
+
+// Serving is how the running tally serve --web listens, so tally web and
+// tally doctor can find it.
+type Serving struct {
+	Listen string `json:"listen"` // --web-listen
+	Cert   string `json:"cert"`   // --web-cert: tailscale or self
 }
 
 // File is web.json's path.
@@ -145,6 +159,9 @@ func (s Store) SetPassword(password string) error {
 	if len([]rune(password)) < MinPassword {
 		return fmt.Errorf("use at least %d characters", MinPassword)
 	}
+	if len(password) > maxPassword {
+		return fmt.Errorf("use at most %d bytes", maxPassword)
+	}
 	h := hashPassword(password)
 	return s.update(func(st *State) error {
 		st.Password, st.Browsers, st.Codes = h, nil, nil
@@ -190,10 +207,40 @@ func GeneratePassword() string {
 // IssueCode makes a single-use sign-in code valid for ttl and returns it,
 // base64url without padding. Expired codes are dropped as it goes.
 func (s Store) IssueCode(ttl time.Duration, now time.Time) (string, error) {
+	return s.issue("", ttl, now)
+}
+
+// IssueInstallCode makes a code for a signed-in browser's home screen copy.
+// It dies with that browser: signing it out or revoking it voids the code.
+// A browser holds at most maxInstallCodes; asking for more drops its oldest.
+func (s Store) IssueInstallCode(issuer string, now time.Time) (string, error) {
+	return s.issue(issuer, InstallCodeTTL, now)
+}
+
+func (s Store) issue(issuer string, ttl time.Duration, now time.Time) (string, error) {
 	raw := make([]byte, 32)
 	rand.Read(raw)
 	err := s.update(func(st *State) error {
-		st.Codes = append(live(st.Codes, now), Code{SHA256: hash(raw), Expires: now.UTC().Add(ttl).Truncate(time.Second)})
+		if issuer != "" && !st.Has(issuer) {
+			return errors.New("that browser is signed out")
+		}
+		codes := live(st.Codes, now)
+		if issuer != "" {
+			var mine []int
+			for i, c := range codes {
+				if c.Issuer == issuer {
+					mine = append(mine, i)
+				}
+			}
+			for len(mine) >= maxInstallCodes { // oldest first: codes are appended in order
+				codes = append(codes[:mine[0]], codes[mine[0]+1:]...)
+				mine = mine[1:]
+				for j := range mine {
+					mine[j]--
+				}
+			}
+		}
+		st.Codes = append(codes, Code{SHA256: hash(raw), Expires: now.UTC().Add(ttl).Truncate(time.Second), Issuer: issuer})
 		return nil
 	})
 	if err != nil {
@@ -211,21 +258,73 @@ func (s Store) RedeemCode(code string, now time.Time) (bool, error) {
 	}
 	found := false
 	err := s.update(func(st *State) error {
-		codes := live(st.Codes, now)
-		at := -1
-		for i, c := range codes {
-			if subtle.ConstantTimeCompare([]byte(h), []byte(c.SHA256)) == 1 {
-				at = i
-			}
-		}
-		if at >= 0 {
-			codes = append(codes[:at], codes[at+1:]...)
-			found = true
-		}
-		st.Codes = codes
+		found = st.takeCode(h, now)
 		return nil
 	})
 	return found, err
+}
+
+// SignInWithCode uses up a sign-in code and signs the browser in, in one
+// write, so a password change or revoke can't land in between. ok is false
+// for an unknown, expired or used code, or one whose browser signed out.
+func (s Store) SignInWithCode(code, label, from string, now time.Time) (token string, b Browser, ok bool, err error) {
+	h := TokenHash(code)
+	if h == "" {
+		return "", Browser{}, false, nil
+	}
+	token, b, err = s.signIn(label, from, now, func(st *State) error {
+		if ok = st.takeCode(h, now); !ok {
+			return errUnchanged
+		}
+		return nil
+	})
+	if err == errUnchanged {
+		err = nil
+	}
+	return token, b, ok, err
+}
+
+// SignInWithPassword signs a browser in whose password was checked against
+// passwordHash, refusing if the password has changed since.
+func (s Store) SignInWithPassword(passwordHash, label, from string, now time.Time) (string, Browser, error) {
+	return s.signIn(label, from, now, func(st *State) error {
+		if st.Password != passwordHash {
+			return errPasswordChanged
+		}
+		return nil
+	})
+}
+
+// takeCode removes the live code with hash h, dropping expired codes as it
+// goes, and reports whether there was one. A code whose issuing browser has
+// signed out doesn't count.
+func (st *State) takeCode(h string, now time.Time) bool {
+	codes := live(st.Codes, now)
+	at := -1
+	for i, c := range codes {
+		if subtle.ConstantTimeCompare([]byte(h), []byte(c.SHA256)) == 1 {
+			at = i
+		}
+	}
+	found := false
+	if at >= 0 {
+		found = codes[at].Issuer == "" || st.Has(codes[at].Issuer)
+		codes = append(codes[:at], codes[at+1:]...)
+	}
+	st.Codes = codes
+	return found
+}
+
+// dropCodesOf removes the codes issued by browsers that are no longer
+// signed in.
+func (st *State) dropCodesOf() {
+	kept := st.Codes[:0]
+	for _, c := range st.Codes {
+		if c.Issuer == "" || st.Has(c.Issuer) {
+			kept = append(kept, c)
+		}
+	}
+	st.Codes = kept
 }
 
 func live(codes []Code, now time.Time) []Code {
@@ -277,18 +376,40 @@ func (st State) CheckPassword(password string) bool {
 // SignIn records a new browser and returns its cookie value, base64url
 // without padding. The value is shown to the browser once and never stored.
 func (s Store) SignIn(label, from string, now time.Time) (string, Browser, error) {
+	return s.signIn(label, from, now, func(*State) error { return nil })
+}
+
+// signIn records a new browser when allow, run under the lock, says so.
+// Browsers not seen for CookieAge are dropped as it goes.
+func (s Store) signIn(label, from string, now time.Time, allow func(*State) error) (string, Browser, error) {
 	raw := make([]byte, 32)
 	rand.Read(raw)
 	h := hash(raw)
 	now = now.UTC().Truncate(time.Second)
 	b := Browser{ID: h[:8], Label: label, TokenSHA256: h, From: from, Created: now, LastSeen: now}
 	if err := s.update(func(st *State) error {
-		st.Browsers = append(st.Browsers, b)
+		if err := allow(st); err != nil {
+			return err
+		}
+		kept := st.Browsers[:0]
+		for _, o := range st.Browsers {
+			if !o.Expired(now) {
+				kept = append(kept, o)
+			}
+		}
+		st.Browsers = append(kept, b)
+		st.dropCodesOf()
 		return nil
 	}); err != nil {
 		return "", Browser{}, err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), b, nil
+}
+
+// Expired reports whether the browser has gone unseen longer than its
+// cookie lasts; its session no longer counts.
+func (b Browser) Expired(now time.Time) bool {
+	return now.Sub(b.LastSeen) > CookieAge
 }
 
 // Match returns the browser this cookie value belongs to, comparing hashes
@@ -352,6 +473,7 @@ func (s Store) SignOut(tokenSHA256 string) error {
 			}
 		}
 		st.Browsers = kept
+		st.dropCodesOf()
 		return nil
 	})
 }
@@ -384,6 +506,7 @@ func (s Store) Revoke(prefix string) (int, error) {
 			return fmt.Errorf("%q matches %d browsers; give more of the id", prefix, len(match))
 		}
 		st.Browsers = append(st.Browsers[:match[0]], st.Browsers[match[0]+1:]...)
+		st.dropCodesOf()
 		n = 1
 		return nil
 	})
@@ -403,4 +526,15 @@ func TokenHash(token string) string {
 		return ""
 	}
 	return hash(raw)
+}
+
+// SetServing records how tally serve --web listens; nil clears it.
+func (s Store) SetServing(v *Serving) error {
+	return s.updateMaybe(func(st *State) error {
+		if (st.Serving == nil && v == nil) || (st.Serving != nil && v != nil && *st.Serving == *v) {
+			return errUnchanged
+		}
+		st.Serving = v
+		return nil
+	})
 }

@@ -604,8 +604,10 @@ let deferredInstall = null; // Chrome on Android offers its own install prompt
 addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; });
 
 // The home screen copy opens the address it was saved from and, on iOS,
-// has its own cookies. So before the user adds it, put a fresh single-use
-// sign-in code in this page's address; its first launch signs itself in.
+// has its own cookies. So while the install card is open, put a fresh
+// single-use sign-in code in this page's address; its first launch signs
+// itself in. The code leaves the address when the card closes, so it
+// doesn't linger in the tab or its history.
 async function armInstallLink() {
   try {
     const r = await fetch("/install-code", { method: "POST", credentials: "same-origin" });
@@ -618,8 +620,10 @@ async function armInstallLink() {
 async function showInstall() {
   if (deferredInstall) {
     await armInstallLink();
-    deferredInstall.prompt();
+    const prompt = deferredInstall;
     deferredInstall = null;
+    prompt.prompt();
+    try { await prompt.userChoice; } finally { disarmInstallLink(); }
     return;
   }
   if (!/iphone|ipad|ipod/i.test(navigator.userAgent)) {
@@ -630,8 +634,13 @@ async function showInstall() {
   $("install").hidden = false;
 }
 
+function disarmInstallLink() {
+  if (location.search) history.replaceState(null, "", "/");
+}
+
 function hideInstall() {
   $("install").hidden = true;
+  disarmInstallLink();
   save("installSeen", true);
 }
 

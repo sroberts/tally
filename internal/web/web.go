@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -96,6 +97,9 @@ func New(cfg Config) *Server {
 	}
 }
 
+// Dir is the directory holding web.json.
+func (s *Server) Dir() string { return s.cfg.Store.Dir }
+
 // Handler routes every request. Pages and the WebSocket need a signed-in
 // browser; the stylesheet, scripts and icons don't, so the sign-in page
 // can use them.
@@ -127,7 +131,8 @@ func headers(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin") // no-referrer makes Chrome send Origin: null on our own POSTs
-		h.Set("Strict-Transport-Security", "max-age=31536000")
+		// No HSTS: it would cover every port on the MagicDNS name, breaking
+		// any plain-http service there, and this listener is HTTPS only anyway.
 		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
@@ -167,7 +172,11 @@ func (s *Server) browser(r *http.Request) (Browser, bool) {
 	if err != nil {
 		return Browser{}, false
 	}
-	return st.Match(c.Value)
+	b, ok := st.Match(c.Value)
+	if !ok || b.Expired(s.cfg.Now()) {
+		return Browser{}, false
+	}
+	return b, true
 }
 
 func (s *Server) setCookie(w http.ResponseWriter, value string, age time.Duration) {
@@ -181,9 +190,15 @@ func (s *Server) setCookie(w http.ResponseWriter, value string, age time.Duratio
 func (s *Server) pad(w http.ResponseWriter, r *http.Request) {
 	b, ok := s.browser(r)
 	if code := r.URL.Query().Get("code"); code != "" {
-		if !ok && !s.redeem(w, r, code) {
-			http.Redirect(w, r, "/login?expired=1", http.StatusSeeOther)
-			return
+		if !ok {
+			switch s.redeem(w, r, code) {
+			case redeemBlocked:
+				s.renderLogin(w, http.StatusTooManyRequests, "too many tries. wait a minute")
+				return
+			case redeemRefused:
+				http.Redirect(w, r, "/login?expired=1", http.StatusSeeOther)
+				return
+			}
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -199,36 +214,41 @@ func (s *Server) pad(w http.ResponseWriter, r *http.Request) {
 	s.serveFile(w, "static/index.html", "text/html; charset=utf-8")
 }
 
+type redeemResult int
+
+const (
+	redeemOK redeemResult = iota
+	redeemRefused
+	redeemBlocked
+)
+
 // redeem signs the browser in with a single-use code, counting a bad code
-// as a failed sign-in.
-func (s *Server) redeem(w http.ResponseWriter, r *http.Request, code string) bool {
+// as a failed sign-in from its address. Codes are 256 bits, so the overall
+// limit doesn't apply: guessing one is hopeless, and counting them would
+// let anyone lock everyone out.
+func (s *Server) redeem(w http.ResponseWriter, r *http.Request, code string) redeemResult {
 	ip := sourceIP(r)
-	if s.limiter.blocked(ip) {
-		return false
+	if s.limiter.blockedHere(ip) {
+		return redeemBlocked
 	}
-	ok, err := s.cfg.Store.RedeemCode(code, s.cfg.Now())
+	token, b, ok, err := s.cfg.Store.SignInWithCode(code, Label(r.UserAgent()), ip, s.cfg.Now())
 	if err != nil {
 		s.cfg.Log.Error("web.json", "err", err)
+		return redeemRefused
 	}
 	if !ok {
 		s.limiter.fail(ip)
 		s.cfg.Log.Info("browser sign-in code refused", "from", ip)
-		return false
+		return redeemRefused
 	}
-	return s.startSession(w, r, "code")
+	s.signedIn(w, b, token, ip, "code")
+	return redeemOK
 }
 
-// startSession records a newly signed-in browser and sets its cookie.
-func (s *Server) startSession(w http.ResponseWriter, r *http.Request, how string) bool {
-	ip := sourceIP(r)
-	token, b, err := s.cfg.Store.SignIn(Label(r.UserAgent()), ip, s.cfg.Now())
-	if err != nil {
-		s.cfg.Log.Error("web.json", "err", err)
-		return false
-	}
+// signedIn logs a newly signed-in browser and sets its cookie.
+func (s *Server) signedIn(w http.ResponseWriter, b Browser, token, ip, how string) {
 	s.cfg.Log.Info("browser signed in", "browser", b.Label, "id", b.ID, "from", ip, "with", how)
 	s.setCookie(w, token, CookieAge)
-	return true
 }
 
 // installCode gives a signed-in page a code to put in its own address, so
@@ -239,11 +259,12 @@ func (s *Server) installCode(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cross-origin request refused", http.StatusForbidden)
 		return
 	}
-	if _, ok := s.browser(r); !ok {
+	b, ok := s.browser(r)
+	if !ok {
 		http.Error(w, "sign in first", http.StatusUnauthorized)
 		return
 	}
-	code, err := s.cfg.Store.IssueCode(InstallCodeTTL, s.cfg.Now())
+	code, err := s.cfg.Store.IssueInstallCode(b.TokenSHA256, s.cfg.Now())
 	if err != nil {
 		http.Error(w, "can't save the code", http.StatusInternalServerError)
 		return
@@ -312,22 +333,36 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		s.renderLogin(w, http.StatusServiceUnavailable, "no password set. run tally web --set-password")
 		return
 	}
-	ok := false
-	if password != "" && len(password) <= maxPassword {
-		s.check.Lock()
-		ok = st.CheckPassword(password)
+	// Check the limit again once it's this request's turn, and count a
+	// failure before the next check starts, so requests sent all at once
+	// still get only MaxFailures guesses.
+	s.check.Lock()
+	if s.limiter.blocked(ip) {
 		s.check.Unlock()
+		s.renderLogin(w, http.StatusTooManyRequests, "too many tries. wait a minute")
+		return
 	}
+	ok := password != "" && len(password) <= maxPassword && st.CheckPassword(password)
 	if !ok {
 		s.limiter.fail(ip)
+	}
+	s.check.Unlock()
+	if !ok {
 		s.cfg.Log.Info("browser sign-in failed", "from", ip)
 		s.renderLogin(w, http.StatusUnauthorized, "wrong password")
 		return
 	}
-	if !s.startSession(w, r, "password") {
+	token, b, err := s.cfg.Store.SignInWithPassword(st.Password, Label(r.UserAgent()), ip, s.cfg.Now())
+	if errors.Is(err, errPasswordChanged) {
+		s.renderLogin(w, http.StatusConflict, "the password just changed. sign in again")
+		return
+	}
+	if err != nil {
+		s.cfg.Log.Error("web.json", "err", err)
 		s.renderLogin(w, http.StatusInternalServerError, "tally can't save the sign-in")
 		return
 	}
+	s.signedIn(w, b, token, ip, "password")
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -501,22 +536,40 @@ func (l *limiter) prune(ts []time.Time) []time.Time {
 	return kept
 }
 
+// blocked reports whether ip, or everyone, has used up its failures.
 func (l *limiter) blocked(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.all = l.prune(l.all)
+	return l.mine(ip) >= MaxFailures || len(l.all) >= MaxAllFailures
+}
+
+// blockedHere reports whether ip has used up its own failures, ignoring
+// everyone else's.
+func (l *limiter) blockedHere(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mine(ip) >= MaxFailures
+}
+
+func (l *limiter) mine(ip string) int {
 	mine := l.prune(l.fails[ip])
 	if len(mine) == 0 {
 		delete(l.fails, ip)
 	} else {
 		l.fails[ip] = mine
 	}
-	return len(mine) >= MaxFailures || len(l.all) >= MaxAllFailures
+	return len(mine)
 }
 
 func (l *limiter) fail(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	for other := range l.fails { // drop addresses whose failures have aged out
+		if other != ip {
+			l.mine(other)
+		}
+	}
 	now := l.now()
 	l.fails[ip] = append(l.prune(l.fails[ip]), now)
 	l.all = append(l.prune(l.all), now)

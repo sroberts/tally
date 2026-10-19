@@ -26,17 +26,23 @@ func checkWeb() []doctor.Result {
 	if err != nil {
 		return []doctor.Result{{Name: "web", Level: doctor.Warn, Detail: err.Error()}}
 	}
-	probeErr := probeWeb(net.JoinHostPort("127.0.0.1", strconv.Itoa(web.Port)))
-	results := []doctor.Result{doctor.WebListener(probeErr, web.Port)}
-	if probeErr != nil {
+	st, stErr := web.Store{Dir: store.Dir}.Load()
+	serving := webServing(st)
+	port := listenPort(serving.Listen, web.Port)
+	probeErr := probeWeb(probeAddr(serving.Listen, port))
+	results := []doctor.Result{doctor.WebListener(probeErr, port)}
+	if probeErr != nil && !doctor.NoCertificate(probeErr) {
 		return results // off: the rest only matters once it runs
 	}
 
-	st, err := web.Store{Dir: store.Dir}.Load()
-	if err != nil {
-		results = append(results, doctor.Result{Name: "web password", Level: doctor.Fail, Detail: err.Error()})
+	if stErr != nil {
+		results = append(results, doctor.Result{Name: "web password", Level: doctor.Fail, Detail: stErr.Error()})
 	} else {
 		results = append(results, doctor.WebPassword(st.Password != "", len(st.Browsers)))
+	}
+	if serving.Cert == "self" {
+		return append(results, doctor.Result{Name: "web cert", Level: doctor.Info,
+			Detail: "tally's own certificate (--web-cert self); browsers warn until it is trusted on the device"})
 	}
 
 	name := ""
@@ -52,6 +58,16 @@ func checkWeb() []doctor.Result {
 		notAfter, loadErr = certExpiry(certFile)
 	}
 	return append(results, doctor.WebCert(name, notAfter, loadErr, time.Now()))
+}
+
+// probeAddr is where to reach a listener on listen from this machine:
+// localhost for every interface, else the address it is bound to.
+func probeAddr(listen string, port int) string {
+	host, _, _ := net.SplitHostPort(listen)
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // probeWeb fetches the sign-in page from localhost. The certificate is for

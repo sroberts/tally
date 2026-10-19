@@ -98,6 +98,10 @@ func serve(args []string) error {
 			return fmt.Errorf("web listener: %w", err)
 		}
 		log.Info("web listener", "addr", ln.Addr().String())
+		// So tally web and tally doctor know where to find it.
+		if err := (web.Store{Dir: ws.Dir()}).SetServing(&web.Serving{Listen: *webListen, Cert: *webCert}); err != nil {
+			log.Warn("web.json", "err", err)
+		}
 		wg.Go(func() {
 			if err := ws.Serve(ctx, ln); err != nil {
 				log.Error("web listener stopped", "err", err)

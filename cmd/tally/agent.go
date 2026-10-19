@@ -109,8 +109,18 @@ func installAgent(args []string) error {
 	if err != nil || !*webOn {
 		return err
 	}
+	serving := web.Serving{Listen: *webListen, Cert: *webCert}
+	if serving.Listen == "" {
+		serving.Listen = fmt.Sprintf(":%d", web.Port)
+	}
+	if serving.Cert == "" {
+		serving.Cert = "tailscale"
+	}
+	if err := ws.SetServing(&serving); err != nil {
+		return err
+	}
 	fmt.Println()
-	return showWebSignIn(ws, listenPort(*webListen, web.Port), pw)
+	return showWebSignIn(ws, pw)
 }
 
 // listenPort is addr's port, or def when addr is empty or has none.
