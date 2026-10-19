@@ -19,7 +19,8 @@ tally status          # herdr's agents in slot order
 ### The soft pad
 
 ```bash
-tally pair                          # shows a QR code; scan it with vibepad
+tally pair                          # asks which paths to use, then shows a QR code for vibepad
+tally pair --via tailscale          # one pairing that survives network changes
 tally install-agent --remote        # serve phones on :47824 as well as the pad
 tally pair --list                   # paired phones
 tally pair --revoke phone           # unpair one and drop its live connection
