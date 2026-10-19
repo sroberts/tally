@@ -12,13 +12,20 @@ Use either one or both at once.
 You need [Go](https://go.dev/dl/) 1.27 or later and a running herdr.
 
 ```bash
-git clone https://github.com/sroberts/tally && cd tally
-go build -o ~/.local/bin/tally ./cmd/tally
+go install github.com/sroberts/tally@latest
 ```
+
+That puts `tally` in Go's bin directory, usually `~/go/bin`. If your shell can't find it, add that directory to your `PATH`:
+
+```bash
+echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc   # or ~/.bashrc; then open a new terminal
+```
+
+**To update,** run the same `go install`, then `tally install-agent` again with the flags you first used, so the background agent restarts on the new version.
 
 ## Start it
 
-**Hardware pad only:**
+**Hardware pad only** ([vibe-macropad](https://github.com/sroberts/vibe-macropad), plugged in over USB):
 
 ```bash
 tally install-agent   # runs tally in the background, now and at login
@@ -34,6 +41,8 @@ tally install-agent --web
 This prints a generated password once and a QR code. Scan the code with your phone's camera to open the pad already signed in.
 
 ## The browser pad
+
+<img src="docs/browser-pad.png" alt="The browser pad on a phone: six agent tiles, with a2 needing approval and its yes, always and no keys lit" width="300">
 
 ### Set up Tailscale
 

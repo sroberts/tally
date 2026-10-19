@@ -78,7 +78,7 @@ HOME=$scratch tally serve --web --web-cert self --no-device --web-listen 127.0.0
 
 ```bash
 cp ~/.local/bin/tally ~/.local/bin/tally.prev        # keep a way back
-go build -o ~/.local/bin/tally ./cmd/tally
+go build -o ~/.local/bin/tally .
 launchctl kickstart -k gui/$(id -u)/local.tally      # Linux: systemctl --user restart tally
 tally doctor
 ```
