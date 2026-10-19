@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and setups
+    url: https://github.com/sroberts/tally/discussions
+    about: Ask a question or show off your setup.
+  - name: Security report
+    url: https://github.com/sroberts/tally/security/advisories/new
+    about: Report a vulnerability privately.

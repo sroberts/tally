@@ -38,6 +38,16 @@ Work follows GitHub Flow:
 
 Tests are the contract. Fix the code to pass them; change an existing test only with the owner's explicit sign-off.
 
+CI (`.github/workflows/ci.yml`) runs gofmt, `go vet` and `go test -short` on Linux and macOS for every PR and every push to `main`; a PR merges only when it's green.
+
+### Releasing
+
+1. On an up-to-date `main` with green CI, tag the release: `git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0`. Pushing a tag is the one push to the remote that isn't a branch.
+2. The release workflow (`.github/workflows/release.yml`) runs GoReleaser on macOS: macOS builds need cgo for serial port discovery, Linux builds are pure Go. It publishes archives for macOS and Linux (arm64 and amd64), checksums and notes generated from the merged PRs, and stamps the version into `tally version` and the `hello` message.
+3. Check the release page, then `go install github.com/sroberts/tally@latest` picks up the tag.
+
+To try the release build without publishing, run the release workflow by hand (Actions → release → Run workflow); it builds a snapshot and attaches the archives as an artifact. Versions follow semver; while tally is 0.x, a minor bump can change behavior.
+
 ## Build, test, run
 
 ```bash
