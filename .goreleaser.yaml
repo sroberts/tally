@@ -1,0 +1,34 @@
+version: 2
+
+builds:
+  - id: darwin
+    goos: [darwin]
+    goarch: [arm64, amd64]
+    env: [CGO_ENABLED=1] # go.bug.st/serial's port discovery uses IOKit
+    overrides:
+      - goos: darwin
+        goarch: amd64
+        env: [CGO_ENABLED=1, "CGO_CFLAGS=-arch x86_64", "CGO_LDFLAGS=-arch x86_64"]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+  - id: linux
+    goos: [linux]
+    goarch: [amd64, arm64]
+    env: [CGO_ENABLED=0]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+
+archives:
+  - formats: [tar.gz]
+    name_template: "tally_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [README.md, LICENSE]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  filters:
+    exclude: ["^Merge pull request"]
+
+release:
+  footer: |
+    Install with Go: `go install github.com/sroberts/tally@{{ .Tag }}`, or download the archive for your system below.

@@ -1,0 +1,24 @@
+name: Bug report
+description: Something in tally doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: tally doctor
+      description: The output of `tally doctor`. Replace your machine's Tailscale name if you'd rather not share it.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: "`tally version`, `herdr --version`, your OS, and the browser or pad you used."
+    validations:
+      required: true

@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -22,8 +24,20 @@ import (
 	"github.com/sroberts/tally/internal/web"
 )
 
-// version is tally's version, sent to phones in hello.
-const version = "0.3.0"
+// version is tally's version, sent to clients in hello. Release builds set
+// it with -ldflags "-X main.version=..."; go install builds take it from
+// the module version.
+var version = ""
+
+func tallyVersion() string {
+	if version != "" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return strings.TrimPrefix(bi.Main.Version, "v")
+	}
+	return "dev"
+}
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
@@ -183,7 +197,7 @@ func newRemote(path string, reader *herdr.Client, n int, listen string, log *slo
 	log.Info("remote identity", "host", host, "host_id", hostID, "cert_sha256", fp)
 	h, _, _ := net.SplitHostPort(listen)
 	return remote.New(remote.Config{
-		Store: store, Slots: n, HostName: host, HostID: hostID, Version: version,
+		Store: store, Slots: n, HostName: host, HostID: hostID, Version: tallyVersion(),
 		Writer: herdr.NewWriter(path), Snapshot: reader.Snapshot,
 		Bonjour: h == "" || h == "0.0.0.0" || h == "::",
 		Log:     log,

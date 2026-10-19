@@ -40,7 +40,8 @@ commands:
                 [--no-device] [--port PATH] [--slots N]
                                    run tally serve at login (LaunchAgent or systemd unit), and now
   uninstall-agent                  stop and remove the background agent
-  doctor                           check herdr, its settings, the agent, the pad and the remote listener
+  doctor                           check herdr, its settings, the agent, the browser pad and the MacroPad
+  version                          print tally's version
 `
 
 func main() {
@@ -68,6 +69,9 @@ func main() {
 		err = uninstallAgent(os.Args[2:])
 	case "doctor":
 		err = doctorCmd(os.Args[2:])
+	case "version", "--version", "-v":
+		fmt.Println("tally", tallyVersion())
+		return
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

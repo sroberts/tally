@@ -33,4 +33,4 @@ In this sandbox git can't read `~/.gitconfig`; prefix git (and `go build`, which
 
 Never send keys to live herdr panes from tests or while developing: the user's real agents run there. Test writes against a fake writer, or a scratch tab you create and close.
 
-Push, open PRs or merge only when the user asks; merges are merge commits.
+Push, open PRs, merge or tag releases only when the user asks; merges are merge commits.

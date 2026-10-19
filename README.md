@@ -1,6 +1,11 @@
 # tally
 
-tally puts your [herdr](https://herdr.dev) Claude Code agents on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It runs in the background on the machine where herdr runs.
+[![ci](https://github.com/sroberts/tally/actions/workflows/ci.yml/badge.svg)](https://github.com/sroberts/tally/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/sroberts/tally)](https://github.com/sroberts/tally/releases/latest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sroberts/tally)](https://goreportcard.com/report/github.com/sroberts/tally)
+[![license](https://img.shields.io/github/license/sroberts/tally)](LICENSE)
+
+Running several Claude Code agents means constantly checking which one is waiting on you. tally puts your [herdr](https://herdr.dev) agents on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It runs in the background on the machine where herdr runs.
 
 - **The browser pad** is the main way to use it: a pad on your phone's home screen, served by tally over HTTPS behind a password.
 - **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, an Adafruit MacroPad on your desk, is optional. Its keys light by the same states, and it can run alongside the browser pad.
@@ -21,7 +26,9 @@ That puts `tally` in Go's bin directory, usually `~/go/bin`. If your shell can't
 echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> ~/.zshrc   # or ~/.bashrc; then open a new terminal
 ```
 
-**To update,** run the same `go install`, then `tally install-agent` again with the flags you first used, so the background agent restarts on the new version.
+No Go? Download the archive for macOS or Linux from [Releases](https://github.com/sroberts/tally/releases/latest), unpack it, and move `tally` into a directory on your `PATH`, such as `~/.local/bin`. On macOS, if you downloaded it with a browser, clear the quarantine flag first: `xattr -d com.apple.quarantine tally`.
+
+**To update,** run the same `go install` (or download the new release), then `tally install-agent` again with the flags you first used, so the background agent restarts on the new version.
 
 ## Start it
 
@@ -87,6 +94,7 @@ If you never use the hardware pad, `--no-device` stops tally looking for it.
 | `tally status` | List herdr's agents in slot order |
 | `tally web` | Show a sign-in QR code for the browser pad |
 | `tally serve [--web]` | Run tally in this terminal instead of the background |
+| `tally version` | Print tally's version |
 
 `--no-device` skips looking for the hardware pad. Logs go to `~/Library/Logs/tally.log` on macOS and to the journal on Linux (`journalctl --user -u tally`).
 
@@ -108,7 +116,7 @@ An empty slot shows `—` on the browser pad and an unlit key on the hardware pa
 
 ## Contributing
 
-See [`docs/developer.md`](docs/developer.md) for building, testing, the design docs and how changes land.
+Questions and setups go in [Discussions](https://github.com/sroberts/tally/discussions); bugs and ideas in [Issues](https://github.com/sroberts/tally/issues). See [`docs/developer.md`](docs/developer.md) for building, testing, the design docs and how changes land, and [`SECURITY.md`](SECURITY.md) to report a vulnerability privately.
 
 ## License
 
