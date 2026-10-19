@@ -100,15 +100,15 @@ If you never use the hardware pad, `--no-device` stops tally looking for it.
 
 ## Agent states
 
-Each agent is in one of five states. The pads share one palette, where ochre always means "needs you". herdr's sidebar uses its theme's colors and the dot or symbol set by `ui.status_indicators` (dots by default, `symbols` for the second icon).
+Each agent is in one of five states. The pads share one palette, where amber always means "needs you". herdr's sidebar uses its theme's colors and the dot or symbol set by `ui.status_indicators` (dots by default, `symbols` for the second icon).
 
 | State | Means | Browser pad | herdr sidebar | Hardware pad |
 | --- | --- | --- | --- | --- |
-| **Needs you** (`N`) | A permission prompt or question is waiting | Ochre tile, pulsing, with the wait time; **attn** pulses. Focused: **yes**, **always** and **no** pulse, **esc** lights red | Red `●` / `×`, "blocked" | Ochre key, pulsing |
+| **Needs you** (`N`) | A permission prompt or question is waiting | Amber tile, pulsing, with the wait time; **attn** pulses. Focused: **yes**, **always** and **no** pulse, **esc** lights red | Red `●` / `×`, "blocked" | Amber key, blinking |
 | **Done** (`G`) | Finished a turn you haven't looked at | Green tile. Focused: **enter** lights green | Teal `●` / `✓`, "done" | Green key |
 | **Working** (`W`) | Running | Blue tile, breathing. Focused: **esc** lights red, **bg** blue | Yellow `●` / `◐`, "working" | Blue key, breathing |
-| **Ready** (`R`) | Idle, and you've seen its result | Gray tile. Focused: **enter** lights green | Green `○`, "idle" | Dim gray key |
-| **Unknown** (`U`) | herdr can't tell yet | Dimmer gray tile | Gray `·`, "idle" | Dimmer gray key |
+| **Ready** (`R`) | Idle, and you've seen its result | Gray tile. Focused: **enter** lights green | Green `○`, "idle" | Dim white key |
+| **Unknown** (`U`) | herdr can't tell yet | Dimmer gray tile | Gray `·`, "idle" | Faint white key |
 
 An empty slot shows `—` on the browser pad and an unlit key on the hardware pad. The focused agent's tile has a white outline, and the others sit at 60%. DRIVE keys light by the focused agent's state, so the keys that matter right now stand out. When the link to tally drops, the tiles dim and the header says why.
 
