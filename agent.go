@@ -33,7 +33,7 @@ func executable() (string, error) {
 		return "", err
 	}
 	if strings.Contains(p, "go-build") {
-		return "", fmt.Errorf("%s is a temporary go run build; build tally first: go build -o ~/.local/bin/tally ./cmd/tally", p)
+		return "", fmt.Errorf("%s is a temporary go run build; install tally first: go install github.com/sroberts/tally@latest", p)
 	}
 	return p, nil
 }

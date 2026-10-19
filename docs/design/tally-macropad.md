@@ -179,7 +179,7 @@ log_level    = "info"
 
 ### Packaging and service
 
-- Build: `go build -o ~/.local/bin/tally ./cmd/tally`, or `go install`.
+- Build: `go install github.com/sroberts/tally@latest`, or `go build -o ~/.local/bin/tally .` from a clone.
 - Service: `tally install-agent [--port PATH] [--slots N]` writes `~/Library/LaunchAgents/local.tally.plist` (`RunAtLoad`, `KeepAlive`, `ProcessType` Interactive, the running binary's resolved path, and `HERDR_SOCKET_PATH`/`HERDR_SESSION` from the installing shell), boots out any loaded copy, loads it with `launchctl bootstrap gui/$(id -u)`, then `launchctl kickstart`s it. `tally uninstall-agent` boots it out and removes the plist.
 - Kickstart is needed: on this macOS, launchd held a fresh bootstrap at `pended nondemand spawn = speculative` (never started) and, after the daemon was killed, held the `KeepAlive` restart at `inefficient` for minutes, on AC power, for any job (`/bin/sleep` too). So `KeepAlive` cannot be counted on, and `tally doctor` reports a held-back start with the `launchctl kickstart` command that clears it. The daemon itself never exits on herdr or device errors, so a restart is needed only after a crash or a kill. Whether `RunAtLoad` starts it at login is still to be confirmed.
 - Logs: stdout and stderr go to `~/Library/Logs/tally.log` (no rotation). The daemon logs only events, so the file grows by a few lines a day; `tally serve --verbose` adds a line per frame.
@@ -352,7 +352,7 @@ One repo holds the daemon, the firmware, and the studio-generated keymap; each m
 
 ```
 tally/
-  cmd/tally/            main.go, CLI wiring
+  *.go (root)           main.go, CLI wiring
   internal/herdr/       socket client, snapshot decoder, subscriptions, method allowlist
   internal/slots/       slot, focus and overflow computation, frames
   internal/device/      discovery, handshake, frame writer, reconnecting link
