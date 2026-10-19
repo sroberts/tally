@@ -40,6 +40,10 @@ Tests are the contract. Fix the code to pass them; change an existing test only 
 
 CI (`.github/workflows/ci.yml`) runs gofmt, `go vet` and `go test -short` on Linux and macOS for every PR and every push to `main`; a PR merges only when it's green.
 
+### The website
+
+`site/` is the project page at https://sroberts.github.io/tally/: plain HTML and CSS, no build step. The pages workflow (`.github/workflows/pages.yml`) deploys it when a change under `site/` reaches `main`. Keep its install steps in step with the README.
+
 ### Releasing
 
 1. On an up-to-date `main` with green CI, tag the release: `git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0`. Pushing a tag is the one push to the remote that isn't a branch.

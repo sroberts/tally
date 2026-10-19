@@ -5,6 +5,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sroberts/tally)](https://goreportcard.com/report/github.com/sroberts/tally)
 [![license](https://img.shields.io/github/license/sroberts/tally)](LICENSE)
 
+**[sroberts.github.io/tally](https://sroberts.github.io/tally/)**
+
 Running several Claude Code agents means constantly checking which one is waiting on you. tally puts your [herdr](https://herdr.dev) agents on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It runs in the background on the machine where herdr runs.
 
 - **The browser pad** is the main way to use it: a pad on your phone's home screen, served by tally over HTTPS behind a password.
