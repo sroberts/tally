@@ -1,6 +1,5 @@
-// The browser pad's lighting, case for case with vibepad's
-// LightingTests.swift (itself ported from the hardware pad's
-// tests/test_render.py). Run: node --test internal/web/static/lighting_test.mjs
+// The browser pad's lighting, case for case with the hardware pad's
+// tests/test_render.py. Run: node --test internal/web/static/lighting_test.mjs
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

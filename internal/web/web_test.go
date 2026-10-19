@@ -439,7 +439,7 @@ func TestNoPasswordSet(t *testing.T) {
 }
 
 // TestLightingJS runs the browser pad's lighting tests (the same cases as
-// vibepad's LightingTests.swift) when node is installed.
+// the hardware pad's tests/test_render.py) when node is installed.
 func TestLightingJS(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {

@@ -1,7 +1,7 @@
-// Lighting and readout for the browser pad: a port of vibepad's
-// Lighting.swift and Readout.swift, which port the hardware pad's
-// render.py. Pure functions of the frame and the link; lighting_test.mjs
-// holds the same cases as vibepad's LightingTests.swift.
+// Lighting and readout for the browser pad: a port of the hardware pad's
+// render.py, keyed by action instead of OLED label. Pure functions of the
+// frame and the link; lighting_test.mjs holds the same cases as
+// vibe-macropad's tests/test_render.py.
 
 export const unfocused = 0.6;
 // Opacity of an unlit key's plate. Unlit keys stay tappable.

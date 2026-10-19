@@ -1,14 +1,14 @@
-// Package web serves the browser pad: the soft pad's screen as a web page,
-// for a phone without the vibepad app.
+// Package web serves the browser pad: a pad for the phone's home screen,
+// as a web page.
 //
-// It is the soft pad's protocol v3 behind a password. A browser signs in
-// once with the password set by tally web --set-password; tally keeps an
-// argon2id hash of it and gives the browser a random cookie, storing only
-// the cookie's SHA-256 in web.json. The page then opens a WebSocket to /ws
-// and speaks v3 exactly as the app does, minus the auth message: the
-// cookie is the auth. Sessions run through the remote server's action
-// table and write allowlist, so the browser can do what the app can and
-// nothing more, and no titles, paths or terminal output leave the host.
+// It is protocol v3 behind a password. A browser signs in once with the
+// password set by tally web --set-password; tally keeps an argon2id hash of
+// it and gives the browser a random cookie, storing only the cookie's
+// SHA-256 in web.json. The page then opens a WebSocket to /ws and speaks v3
+// minus the auth message: the cookie is the auth. Sessions run through the
+// remote server's action table and write allowlist, so the browser can do
+// what a paired client can and nothing more, and no titles, paths or
+// terminal output leave the host.
 //
 // The listener is HTTPS only, with a Tailscale certificate for this
 // machine's MagicDNS name by default, so browsers trust it without a
@@ -37,7 +37,7 @@ import (
 	"github.com/sroberts/tally/internal/remote"
 )
 
-// Port is the browser pad's default HTTPS port, next to the app's 47824.
+// Port is the browser pad's default HTTPS port, next to the remote listener's 47824.
 const Port = 47825
 
 // Sign-in limits and cookie lifetime.

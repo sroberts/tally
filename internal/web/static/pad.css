@@ -1,5 +1,5 @@
-/* The browser pad: vibepad's screen in CSS. Tokens are TEKit's (Tokens.swift)
-   and the pad's palette (Palette.swift). Square chrome, hairlines, no
+/* The browser pad. Teenage-engineering-style tokens and the pad's state
+   palette. Square chrome, hairlines, no
    gradients or shadows, lowercase, color only by state. */
 
 :root {
@@ -66,7 +66,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* The pad fills exactly the visible height (Safari's toolbars included) and
    the DRIVE rows take what's left, 44 to 96 px each. Only when even that
-   doesn't fit does it scroll, like the app's ViewThatFits. */
+   doesn't fit does it scroll. */
 .pad {
   display: flex;
   flex-direction: column;

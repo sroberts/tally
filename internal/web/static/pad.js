@@ -1,4 +1,4 @@
-// The browser pad: vibepad's one screen, talking protocol v3 to tally over
+// The browser pad: one screen, talking protocol v3 to tally over
 // the signed-in WebSocket at /ws. The page sends action names and pane
 // targets, never keys; DRIVE actions carry the target on screen; actions
 // are never retried.
@@ -288,7 +288,7 @@ function build() {
   }
 }
 
-// Long legends shrink to fit their key, down to 60%, as the app's do.
+// Long legends shrink to fit their key, down to 60%.
 function fit() {
   for (const { el: b } of keys.values()) {
     const l = b.querySelector(".legend");
