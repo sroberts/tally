@@ -1,4 +1,4 @@
-# Soft pad protocol v3, as built
+# Remote protocol v3, as built
 
 The phone holds one TLS 1.3 WebSocket to tally, `wss://<endpoint>:47824/` (any path). JSON text
 messages, one object each, every one with a `t` field. Messages are capped at 16 KB; a bigger one
@@ -27,7 +27,7 @@ ping/pong; tally also pings every 5 s and drops a phone that doesn't answer with
 ## Phone → host
 
 ```json
-{"t":"auth","v":3,"token":"<base64url>","client":"softpad/1.0"}
+{"t":"auth","v":3,"token":"<base64url>","client":"pad/1.0"}
 {"t":"action","id":417,"name":"approve_once","target":"w1:p2"}
 {"t":"action","id":418,"name":"focus_slot","slot":3}
 {"t":"action","id":419,"name":"insert_text","target":"w1:p2","text":"rename the handler"}

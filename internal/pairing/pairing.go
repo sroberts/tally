@@ -1,4 +1,4 @@
-// Package pairing holds the soft pad's trust: tally's self-signed
+// Package pairing holds remote clients' trust: tally's self-signed
 // certificate, the host id, and the paired phones in remote.json.
 //
 // tally pair makes a fresh 256-bit token and shows it to the phone once, in
@@ -30,7 +30,7 @@ import (
 	"time"
 )
 
-// Port is the soft pad's TLS WebSocket port.
+// Port is the remote listener's TLS WebSocket port.
 const Port = 47824
 
 // ProtocolVersion is the QR payload's and the wire protocol's version.

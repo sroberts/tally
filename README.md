@@ -72,6 +72,7 @@ Shared by every client:
 
 - [`docs/design/tally-macropad.md`](docs/design/tally-macropad.md): the daemon, slot ordering, serial protocol v2.
 - [`docs/design/browser-pad.md`](docs/design/browser-pad.md): the browser pad, its sign-in and certificates.
+- [`docs/design/remote.md`](docs/design/remote.md): the remote listener for paired phones, pairing and the action table; [`docs/protocol-v3.md`](docs/protocol-v3.md) is its wire format.
 - [`docs/m0-herdr-input.md`](docs/m0-herdr-input.md): which herdr methods and key names the action table uses.
 
 ## Development

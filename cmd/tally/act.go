@@ -9,7 +9,7 @@ import (
 	"github.com/sroberts/tally/internal/herdr"
 )
 
-// act runs one action through the same table the soft pad uses. DRIVE
+// act runs one action through the same table remote clients use. DRIVE
 // actions default to the focused agent, as the phone's do.
 func act(args []string) error {
 	fs := flag.NewFlagSet("act", flag.ExitOnError)

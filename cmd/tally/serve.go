@@ -31,7 +31,7 @@ func serve(args []string) error {
 	cfg := daemon.Defaults()
 	fs.IntVar(&cfg.Slots, "slots", cfg.Slots, "number of Fleet slot keys")
 	verbose := fs.Bool("verbose", false, "also log every frame sent to the pad and every phone action")
-	remoteOn := fs.Bool("remote", false, "serve paired phones (the soft pad) over TLS WebSocket")
+	remoteOn := fs.Bool("remote", false, "serve paired phones over TLS WebSocket")
 	listen := fs.String("listen", fmt.Sprintf(":%d", pairing.Port), "address for --remote, e.g. 100.101.102.103:47824 for Tailscale only")
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
@@ -157,7 +157,7 @@ func newWeb(ctx context.Context, wg *sync.WaitGroup, srv *remote.Server, certMod
 	return web.New(web.Config{Store: ws, Remote: srv, Certs: certs, Log: log}), nil
 }
 
-// newRemote builds the soft pad's server. It is the only place a herdr
+// newRemote builds the remote listener's server. It is the only place a herdr
 // Writer exists while tally serves.
 func newRemote(path string, reader *herdr.Client, n int, listen string, log *slog.Logger) (*remote.Server, error) {
 	store, err := pairing.DefaultStore()

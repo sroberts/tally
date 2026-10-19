@@ -1,4 +1,4 @@
-// Package actions is the soft pad's action table: it turns an action name
+// Package actions is the remote clients' action table: it turns an action name
 // and a target into herdr calls. The phone never sends keys; every key
 // encoding lives here (see docs/m0-herdr-input.md).
 //
