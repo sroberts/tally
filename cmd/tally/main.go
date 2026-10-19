@@ -28,7 +28,7 @@ commands:
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
                                    run one soft pad action against herdr
-  pair [--label NAME] [--via PATHS] [--json] | --list | --revoke NAME
+  pair [--label NAME] [--json] | --list | --revoke NAME
                                    pair a phone (prints a QR code), list or revoke phones
   install-agent [--remote] [--listen ADDR] [--no-device] [--port PATH] [--slots N]
                                    run tally serve at login (LaunchAgent or systemd unit), and now
