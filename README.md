@@ -1,63 +1,88 @@
 # tally
 
-The host daemon for your agent pads. It watches [herdr](https://herdr.dev)'s agents and keeps its clients in step with them:
+tally watches [herdr](https://herdr.dev)'s Claude Code agents and keeps your pads in step with them. It runs in the background on the machine where herdr runs and drives two pads:
 
-- **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, the hardware pad: tally sends state frames over the pad's second USB serial port (protocol v2) and the pad lights its keys. The pad types through USB HID; tally never writes to herdr for it.
-- **The browser pad**, a pad on your phone's home screen: `tally serve --web` serves it over HTTPS behind a password, shows the same state, and runs its keys directly against herdr's socket.
+- **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, the hardware pad. Its keys light by each agent's state.
+- **The browser pad**, a pad for your phone's home screen. It shows the same state, and its keys act on your agents directly.
 
-Both can run at once off the same state engine.
+Use either one or both at once.
+
+## Install
+
+You need [Go](https://go.dev/dl/) 1.27 or later and a running herdr.
 
 ```bash
+git clone https://github.com/sroberts/tally && cd tally
 go build -o ~/.local/bin/tally ./cmd/tally
-tally install-agent   # run tally serve in the background, now and at login
-tally doctor          # check herdr, its settings, the background agent, the pad and the browser pad
-tally status          # herdr's agents in slot order
 ```
 
-`tally serve` runs the daemon in a terminal instead. On macOS it is a LaunchAgent logging to `~/Library/Logs/tally.log`; on Linux, a systemd user unit logging to the journal (`journalctl --user -u tally`). The log records connects, disconnects and errors; `--verbose` adds each frame and action. `tally uninstall-agent` removes the background agent; `--no-device` skips looking for the hardware pad.
+## Start it
+
+**Hardware pad only:**
+
+```bash
+tally install-agent   # runs tally in the background, now and at login
+tally doctor          # checks herdr, the background agent and the pad
+```
+
+**With the browser pad:** set up [Tailscale](https://tailscale.com) first (below), then:
+
+```bash
+tally install-agent --web
+```
+
+This prints a generated password once and a QR code. Scan the code with your phone's camera to open the pad already signed in.
 
 ## The browser pad
 
-A phone-sized control surface for your agents: six agent tiles with an attention badge, twelve DRIVE keys (esc, mode, rewind, yes, always, no, tab, log, compact, enter, talk, bg) aimed at the focused agent, and a row of tools (new, resume, zoom, last, scroll). Keys light by the focused agent's state, so the ones that matter right now stand out.
+### Set up Tailscale
 
-### Getting to it
+1. Install Tailscale on the machine running herdr and on your phone, signed in to the same tailnet.
+2. In the [admin console](https://login.tailscale.com/admin/dns), turn on **MagicDNS** and **HTTPS certificates**.
+3. On Linux, also run `sudo tailscale set --operator=$USER` so tally can fetch its certificate without root.
 
-1. **Tailscale on both ends.** Install [Tailscale](https://tailscale.com) on the machine running herdr and on your phone, signed in to the same tailnet. In the [admin console](https://login.tailscale.com/admin/dns), turn on **MagicDNS** and **HTTPS certificates**. On Linux, also let tally ask for a certificate without root: `sudo tailscale set --operator=$USER`.
-2. **Install tally** with the browser pad on:
-   ```bash
-   go build -o ~/.local/bin/tally ./cmd/tally
-   tally install-agent --web
-   ```
-   This starts tally in the background, generates a password and prints it once, and prints a QR code. tally fetches the certificate for `https://<machine>.<tailnet>.ts.net:47825/` itself within a minute and renews it.
-3. **Scan the QR code** with your phone's camera. It opens the pad and signs that browser in; the code works once, for 15 minutes. Run `tally web` any time for a fresh one.
-4. **Add it to the home screen.** The first time, the pad offers to: in Safari, tap Share → Add to Home Screen → Add, then open **tally** from the home screen. It runs full screen and signs itself in.
-5. **Check** with `tally doctor`: the `web`, `web password` and `web cert` lines should read `ok`.
+tally fetches the certificate for `https://<machine>.<tailnet>.ts.net:47825/` itself within a minute, and renews it.
 
-### Using it
+### Open it on your phone
 
-- Tap a tile to focus that agent; swipe across the tiles for the next or previous one; **attn** jumps to the agent that has waited longest.
-- DRIVE keys always act on the agent named in the `02 drive` header. Approvals pulse ochre when the focused agent needs you; **enter** turns green when it's ready.
-- **talk** opens a text box: type, or tap the keyboard's mic to dictate, then return types the text into the agent and **enter** sends it.
-- With a keyboard: the letters on the keys (`y`, `a`, `n`, `m`, `r`, `o`, `c`, `b`, `z`, `l`), Esc, Tab, Return, the arrows, `1`–`6` for tiles, `0` for attn and `t` for talk.
+1. **Scan the QR code** from `tally install-agent --web`, or run `tally web` for a fresh one. A code works once, for 15 minutes.
+2. **Add it to the home screen** when the pad offers to. In Safari: Share → Add to Home Screen → Add. Then open **tally** from the home screen; it runs full screen and stays signed in.
+3. If something's off, `tally doctor` should show `ok` on its `web`, `web password` and `web cert` lines.
 
-### Managing access
+### Use it
+
+- **Tiles** show your agents. Tap one to focus it, swipe across them for the next or previous agent, and tap **attn** to jump to the agent that has waited longest.
+- **DRIVE keys** (esc, mode, rewind, yes, always, no, tab, log, compact, enter, talk, bg) act on the agent named in the `02 drive` header. They light when they matter: the approval keys pulse when the agent needs you, and **enter** turns green when it's ready.
+- **talk** opens a text box. Type, or dictate with the keyboard's mic. Return types the text into the agent, then **enter** sends it.
+- **With a keyboard,** each key's letter works, plus Esc, Tab, Return, the arrows, `1`–`6` for tiles, `0` for attn and `t` for talk.
+
+### Manage access
 
 ```bash
-tally web                    # a fresh sign-in QR code (and link)
+tally web                    # a fresh sign-in QR code
 tally web --set-password     # pick your own password (12+ characters); signs every browser out
 tally web --list             # signed-in browsers
-tally web --revoke 3f9a01c2  # sign one out (or --revoke all); its pad closes within a second
+tally web --revoke 3f9a01c2  # sign one out, or --revoke all
 ```
 
-The browser pad never runs without a password, and the password never goes in a URL. tally keeps an argon2id hash of it, plus hashes of each browser's cookie and each outstanding sign-in code, in `~/.config/tally/web.json`. Failed sign-ins are limited per address and overall. No agent titles, paths or terminal output leave the machine: the pad sees only slot states and pane ids, and its keys can only reach agent panes.
+The pad always has a password, and the password never goes in a URL. Repeated wrong guesses are slowed down. Your agents' titles, paths and terminal output never leave the machine: the pad sees only each agent's state.
 
-Issuing the Tailscale certificate publishes the machine's `*.ts.net` name in public Certificate Transparency logs. To avoid that, `--web-cert self` uses tally's own certificate instead (browsers warn until it is trusted on the device). `--web-listen` narrows the listening address.
+Getting the Tailscale certificate publishes the machine's `*.ts.net` name in public Certificate Transparency logs. To avoid that, add `--web-cert self` to use tally's own certificate instead; browsers warn until you trust it on the device. `--web-listen ADDR` narrows where the pad listens (default `:47825`).
 
-`tally act approve_once --dry-run` runs any pad action from the terminal, printing the herdr calls instead of making them.
+## Commands
 
-## Slot codes
+| Command | Does |
+| --- | --- |
+| `tally install-agent [--web]` | Run tally in the background, now and at login |
+| `tally uninstall-agent` | Stop and remove the background agent |
+| `tally doctor` | Check herdr, the background agent, the pad and the browser pad |
+| `tally status` | List herdr's agents in slot order |
+| `tally web` | Show a sign-in QR code for the browser pad |
+| `tally serve [--web]` | Run tally in this terminal instead of the background |
 
-Shared by every client:
+`--no-device` skips looking for the hardware pad. Logs go to `~/Library/Logs/tally.log` on macOS and to the journal on Linux (`journalctl --user -u tally`).
+
+## Agent states
 
 | Code | Means |
 | --- | --- |
@@ -66,23 +91,10 @@ Shared by every client:
 | `W` | Working |
 | `R` | Ready: idle, and you've seen its result |
 | `U` | Unknown: herdr can't tell yet |
-| `null` | No agent in that slot |
 
-## Design
+## Contributing
 
-- [`docs/design/tally-macropad.md`](docs/design/tally-macropad.md): the daemon, slot ordering, serial protocol v2.
-- [`docs/design/browser-pad.md`](docs/design/browser-pad.md): the browser pad, its sign-in and certificates.
-- [`docs/design/remote.md`](docs/design/remote.md): the remote listener for paired phones, pairing and the action table; [`docs/protocol-v3.md`](docs/protocol-v3.md) is its wire format.
-- [`docs/m0-herdr-input.md`](docs/m0-herdr-input.md): which herdr methods and key names the action table uses.
-
-## Development
-
-```bash
-go test ./...
-node --test internal/web/static/lighting_test.mjs   # also run by go test when node is installed
-```
-
-Work follows GitHub Flow: branch, open a PR, merge with a merge commit.
+See [`docs/developer.md`](docs/developer.md) for building, testing, the design docs and how changes land.
 
 ## License
 
