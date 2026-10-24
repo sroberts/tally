@@ -50,7 +50,7 @@ func serve(args []string) error {
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
 	webListen := fs.String("web-listen", fmt.Sprintf(":%d", web.Port), "address for --web")
-	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (this machine's MagicDNS name) or self (tally's own; browsers warn)")
+	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (from Let's Encrypt via tailscale cert) or self (from tally's own CA; trust it with tally web --ca)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -158,11 +158,9 @@ func newWeb(ctx context.Context, wg *sync.WaitGroup, srv *remote.Server, certMod
 	}
 	var certs web.Certs
 	if certMode == "self" {
-		cert, _, err := store.Certificate(pairing.HostName())
-		if err != nil {
-			return nil, err
-		}
-		certs = web.Static{Cert: cert}
+		self := &web.Self{Dir: filepath.Join(store.Dir, "web", "self"), Bin: web.FindTailscale(), Log: log}
+		wg.Go(func() { self.Run(ctx) })
+		certs = self
 	} else {
 		ts := &web.Tailscale{Dir: filepath.Join(store.Dir, "web"), Bin: web.FindTailscale(), Log: log}
 		wg.Go(func() { ts.Run(ctx) })
