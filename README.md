@@ -89,7 +89,7 @@ Tailscale's certificate comes from Let's Encrypt, and every such certificate is 
    tally install-agent --web --web-cert self
    tally web --ca          # writes tally-ca.cer here
    ```
-2. **Trust the CA on your iPhone or iPad:** AirDrop or email `tally-ca.cer` to it and open it. Then go to Settings → Profile Downloaded → Install, and finally Settings → General → About → Certificate Trust Settings and turn on full trust for **tally CA for <your machine>**. Skip that last step and the pad won't load.
+2. **Trust the CA on your iPhone or iPad:** AirDrop or email `tally-ca.cer` to it and open it. Then go to Settings → Profile Downloaded → Install, and finally Settings → General → About → Certificate Trust Settings and turn on full trust for **tally CA for <your machine>**. Skip that last step and Safari warns before every visit, and the pad on your home screen gets stuck on the warning with no way past it.
    - **Mac:** open the file, then set it to **Always Trust** in Keychain Access.
    - **Android:** Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
 3. **Scan the sign-in code** from `tally web`, as above.
