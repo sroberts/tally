@@ -71,22 +71,23 @@ func WebCert(name string, notAfter time.Time, loadErr error, now time.Time) Resu
 }
 
 // WebSelfCert reports the certificate from tally's own CA (--web-cert
-// self). server and ca are the two expiry times, zero when missing; err is
-// why the server certificate doesn't verify against the CA for name.
-func WebSelfCert(name string, server, ca time.Time, err error, now time.Time) Result {
+// self). server is when the server certificate expires and caReplace when
+// tally will replace the CA, zero when missing; err is why the server
+// certificate doesn't verify against the CA for name.
+func WebSelfCert(name string, server, caReplace time.Time, err error, now time.Time) Result {
 	r := Result{Name: "web cert"}
 	trust := "trust the CA on each device: tally web --ca"
 	switch {
 	case name == "":
 		r.Level, r.Detail, r.Fix = Warn, "tailscale is not running, so the browser pad has no name to certify", "start tailscale"
-	case ca.IsZero():
-		r.Level, r.Detail, r.Fix = Warn, "no certificate authority yet; tally serve --web-cert self makes one", "tally web --ca, then trust it on each device"
+	case caReplace.IsZero():
+		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("no certificate authority for %s yet; tally serve --web-cert self makes one", name), "tally web --ca, then trust it on each device"
 	case server.IsZero():
 		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("no certificate for %s yet; tally serve --web-cert self issues one", name), "restart tally: tally install-agent --web --web-cert self"
 	case err != nil:
-		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("the certificate doesn't verify for %s (%v); tally serve reissues it within a day", name, err), "restart tally to reissue it now; if the name changed, "+trust
-	case ca.Sub(now) < 60*24*time.Hour:
-		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("tally's CA expires %s; tally serve will make a new one", ca.Format(time.DateOnly)), "when it does, "+trust
+		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("the certificate doesn't verify for %s (%v); tally serve reissues it within a day", name, err), "restart tally to reissue it now"
+	case caReplace.Sub(now) < 60*24*time.Hour:
+		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("tally replaces its CA around %s, and devices stop trusting the pad until they trust the new one", caReplace.Format(time.DateOnly)), "after then, "+trust
 	case server.Sub(now) < 14*24*time.Hour:
 		r.Level, r.Detail, r.Fix = Warn, fmt.Sprintf("the certificate for %s expires %s and hasn't renewed", name, server.Format(time.DateOnly)), "restart tally"
 	default:

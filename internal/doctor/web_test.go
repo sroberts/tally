@@ -52,24 +52,24 @@ func TestWebCert(t *testing.T) {
 func TestWebSelfCert(t *testing.T) {
 	now := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
 	day := 24 * time.Hour
-	ca := now.Add(3650 * day)
+	ca := now.Add(3000 * day) // when tally replaces the CA
 	cases := []struct {
-		what       string
-		name       string
-		server, ca time.Time
-		err        error
-		want       Level
+		what              string
+		name              string
+		server, caReplace time.Time
+		err               error
+		want              Level
 	}{
 		{"no tailscale", "", time.Time{}, time.Time{}, nil, Warn},
 		{"no CA", "mbp.tail1.ts.net", time.Time{}, time.Time{}, errors.New("no such file"), Warn},
 		{"no server certificate", "mbp.tail1.ts.net", time.Time{}, ca, errors.New("no such file"), Warn},
 		{"doesn't verify", "mbp.tail1.ts.net", now.Add(300 * day), ca, errors.New("x509: certificate is valid for studio.tail1.ts.net"), Warn},
-		{"CA expiring", "mbp.tail1.ts.net", now.Add(300 * day), now.Add(30 * day), nil, Warn},
+		{"CA replaced soon", "mbp.tail1.ts.net", now.Add(300 * day), now.Add(30 * day), nil, Warn},
 		{"server expiring", "mbp.tail1.ts.net", now.Add(5 * day), ca, nil, Warn},
 		{"ok", "mbp.tail1.ts.net", now.Add(300 * day), ca, nil, OK},
 	}
 	for _, c := range cases {
-		r := WebSelfCert(c.name, c.server, c.ca, c.err, now)
+		r := WebSelfCert(c.name, c.server, c.caReplace, c.err, now)
 		if r.Level != c.want || (r.Level != OK && r.Fix == "") {
 			t.Errorf("%s: got %+v", c.what, r)
 		}

@@ -47,12 +47,12 @@ func checkWeb() []doctor.Result {
 		}
 	}
 	if serving.Cert == "self" {
-		var server, ca time.Time
+		var server, caReplace time.Time
 		var err error
 		if name != "" {
-			server, ca, err = web.CheckSelf(filepath.Join(store.Dir, "web", "self"), name, time.Now())
+			server, caReplace, err = web.CheckSelf(filepath.Join(store.Dir, "web", "self"), name, time.Now())
 		}
-		return append(results, doctor.WebSelfCert(name, server, ca, err, time.Now()))
+		return append(results, doctor.WebSelfCert(name, server, caReplace, err, time.Now()))
 	}
 	var notAfter time.Time
 	var loadErr error

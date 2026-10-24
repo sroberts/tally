@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -50,10 +51,10 @@ func newSelf(t *testing.T, name string) (*Self, func(string)) {
 	return &Self{Dir: t.TempDir(), Bin: bin, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}, setName
 }
 
-func readCA(t *testing.T, dir string) *x509.Certificate {
+func readCA(t *testing.T, dir, name string) *x509.Certificate {
 	t.Helper()
-	caFile, _, _, _ := SelfFiles(dir)
-	ca, err := loadCert(caFile)
+	caFile, _ := SelfFiles(dir, name)
+	ca, _, err := loadPair(caFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func roots(ca *x509.Certificate) *x509.CertPool {
 // and refuses any other name.
 func TestSelfHandshake(t *testing.T) {
 	s, _ := newSelf(t, selfName)
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if s.Name() != selfName {
@@ -90,7 +91,7 @@ func TestSelfHandshake(t *testing.T) {
 			go func() { c.(*tls.Conn).Handshake(); c.Close() }()
 		}
 	}()
-	pool := roots(readCA(t, s.Dir))
+	pool := roots(readCA(t, s.Dir, selfName))
 	dial := func(name string) error {
 		c, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{RootCAs: pool, ServerName: name})
 		if err == nil {
@@ -104,9 +105,6 @@ func TestSelfHandshake(t *testing.T) {
 	if err := dial("other.tail1.ts.net"); err == nil {
 		t.Error("another name was accepted")
 	}
-	if err := dial("127.0.0.1"); err == nil {
-		t.Error("an IP address was accepted")
-	}
 }
 
 // The CA and server certificate meet what browsers, Apple's especially,
@@ -114,15 +112,21 @@ func TestSelfHandshake(t *testing.T) {
 func TestSelfCertificateShape(t *testing.T) {
 	s, _ := newSelf(t, selfName)
 	now := time.Now()
-	if err := s.Refresh(now); err != nil {
+	if err := s.Refresh(t.Context(), now); err != nil {
 		t.Fatal(err)
 	}
-	ca := readCA(t, s.Dir)
+	ca := readCA(t, s.Dir, selfName)
 	if !ca.IsCA || !ca.BasicConstraintsValid || ca.MaxPathLen != 0 || !ca.MaxPathLenZero {
 		t.Errorf("CA basic constraints: IsCA %v valid %v pathlen %d", ca.IsCA, ca.BasicConstraintsValid, ca.MaxPathLen)
 	}
 	if ca.KeyUsage&x509.KeyUsageCertSign == 0 {
 		t.Error("CA can't sign certificates")
+	}
+	if len(ca.ExtKeyUsage) != 1 || ca.ExtKeyUsage[0] != x509.ExtKeyUsageServerAuth {
+		t.Errorf("CA extended key usage %v, want server auth only", ca.ExtKeyUsage)
+	}
+	if len(ca.PermittedEmailAddresses) == 0 || len(ca.PermittedURIDomains) == 0 {
+		t.Errorf("CA doesn't constrain email addresses (%v) or URIs (%v)", ca.PermittedEmailAddresses, ca.PermittedURIDomains)
 	}
 	if !ca.PermittedDNSDomainsCritical || len(ca.PermittedDNSDomains) != 1 || ca.PermittedDNSDomains[0] != selfName {
 		t.Errorf("CA name constraints: critical %v permitted %v", ca.PermittedDNSDomainsCritical, ca.PermittedDNSDomains)
@@ -166,7 +170,9 @@ func TestSelfCAConstrained(t *testing.T) {
 		key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		tmpl.SerialNumber = serialNumber()
 		tmpl.NotBefore, tmpl.NotAfter = now.Add(-time.Hour), now.Add(24*time.Hour)
-		tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		if tmpl.ExtKeyUsage == nil {
+			tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
+		}
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, ca, &key.PublicKey, caKey)
 		if err != nil {
 			t.Fatal(err)
@@ -178,17 +184,29 @@ func TestSelfCAConstrained(t *testing.T) {
 		return leaf
 	}
 	cases := []struct {
-		what string
-		tmpl *x509.Certificate
-		name string
+		what  string
+		tmpl  *x509.Certificate
+		name  string
+		usage x509.ExtKeyUsage
 	}{
-		{"another domain", &x509.Certificate{Subject: pkix.Name{CommonName: "bank.example.com"}, DNSNames: []string{"bank.example.com"}}, "bank.example.com"},
-		{"a sibling name", &x509.Certificate{DNSNames: []string{"other.tail1.ts.net"}}, "other.tail1.ts.net"},
-		{"an IP address", &x509.Certificate{IPAddresses: []net.IP{net.ParseIP("100.101.102.103")}}, "100.101.102.103"},
-		{"the name plus another", &x509.Certificate{DNSNames: []string{selfName, "bank.example.com"}}, selfName},
+		{"another domain", &x509.Certificate{Subject: pkix.Name{CommonName: "bank.example.com"}, DNSNames: []string{"bank.example.com"}}, "bank.example.com", 0},
+		{"a sibling name", &x509.Certificate{DNSNames: []string{"other.tail1.ts.net"}}, "other.tail1.ts.net", 0},
+		{"an IP address", &x509.Certificate{IPAddresses: []net.IP{net.ParseIP("100.101.102.103")}}, "100.101.102.103", 0},
+		{"the name plus another", &x509.Certificate{DNSNames: []string{selfName, "bank.example.com"}}, selfName, 0},
+		{"signed mail", &x509.Certificate{EmailAddresses: []string{"ceo@example.com"},
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection}}, "", x509.ExtKeyUsageEmailProtection},
+		{"an email address beside the name", &x509.Certificate{DNSNames: []string{selfName}, EmailAddresses: []string{"ceo@example.com"}}, selfName, 0},
+		{"a client certificate", &x509.Certificate{DNSNames: []string{selfName},
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}, "", x509.ExtKeyUsageClientAuth},
+		{"code signing", &x509.Certificate{Subject: pkix.Name{CommonName: "Example Corp"},
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning}}, "", x509.ExtKeyUsageCodeSigning},
 	}
 	for _, c := range cases {
-		_, err := sign(c.tmpl).Verify(x509.VerifyOptions{Roots: roots(ca), DNSName: c.name, CurrentTime: now})
+		opts := x509.VerifyOptions{Roots: roots(ca), DNSName: c.name, CurrentTime: now}
+		if c.usage != 0 {
+			opts.KeyUsages = []x509.ExtKeyUsage{c.usage}
+		}
+		_, err := sign(c.tmpl).Verify(opts)
 		if err == nil {
 			t.Errorf("%s: a certificate from the CA verified", c.what)
 		}
@@ -200,13 +218,13 @@ func TestSelfCAConstrained(t *testing.T) {
 func TestSelfRenews(t *testing.T) {
 	s, _ := newSelf(t, selfName)
 	now := time.Now()
-	if err := s.Refresh(now); err != nil {
+	if err := s.Refresh(t.Context(), now); err != nil {
 		t.Fatal(err)
 	}
-	ca := readCA(t, s.Dir)
+	ca := readCA(t, s.Dir, selfName)
 	first, _ := s.GetCertificate(nil)
 
-	if err := s.Refresh(now.Add(300 * 24 * time.Hour)); err != nil {
+	if err := s.Refresh(t.Context(), now.Add(300*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if kept, _ := s.GetCertificate(nil); !kept.Leaf.Equal(first.Leaf) {
@@ -214,7 +232,7 @@ func TestSelfRenews(t *testing.T) {
 	}
 
 	later := now.Add(370 * 24 * time.Hour)
-	if err := s.Refresh(later); err != nil {
+	if err := s.Refresh(t.Context(), later); err != nil {
 		t.Fatal(err)
 	}
 	renewed, _ := s.GetCertificate(nil)
@@ -224,7 +242,7 @@ func TestSelfRenews(t *testing.T) {
 	if !renewed.Leaf.NotAfter.After(later.Add(300 * 24 * time.Hour)) {
 		t.Errorf("renewed certificate expires %v", renewed.Leaf.NotAfter)
 	}
-	if !readCA(t, s.Dir).Equal(ca) {
+	if !readCA(t, s.Dir, selfName).Equal(ca) {
 		t.Error("renewing replaced the CA")
 	}
 	if _, err := renewed.Leaf.Verify(x509.VerifyOptions{Roots: roots(ca), DNSName: selfName, CurrentTime: later}); err != nil {
@@ -235,12 +253,12 @@ func TestSelfRenews(t *testing.T) {
 // A restart reuses the CA and server certificate on disk.
 func TestSelfReusesFiles(t *testing.T) {
 	s, _ := newSelf(t, selfName)
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := s.GetCertificate(nil)
 	again := &Self{Dir: s.Dir, Bin: s.Bin, Log: s.Log}
-	if err := again.Refresh(time.Now()); err != nil {
+	if err := again.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := again.GetCertificate(nil); !c.Leaf.Equal(first.Leaf) {
@@ -253,20 +271,21 @@ func TestSelfReusesFiles(t *testing.T) {
 }
 
 // Renaming the machine needs a CA for the new name, which devices must
-// trust again; the server certificate follows it.
+// trust again; the server certificate follows it. Switching back finds the
+// first CA again, so devices that trust it keep working.
 func TestSelfNameChange(t *testing.T) {
 	s, setName := newSelf(t, selfName)
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	oldCA := readCA(t, s.Dir)
+	oldCA := readCA(t, s.Dir, selfName)
 	setName("studio.tail1.ts.net")
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	newCA := readCA(t, s.Dir)
+	newCA := readCA(t, s.Dir, "studio.tail1.ts.net")
 	if newCA.Equal(oldCA) || !CACovers(newCA, "studio.tail1.ts.net") {
-		t.Fatalf("CA not replaced for the new name: %v", newCA.PermittedDNSDomains)
+		t.Fatalf("no CA for the new name: %v", newCA.PermittedDNSDomains)
 	}
 	c, _ := s.GetCertificate(nil)
 	if s.Name() != "studio.tail1.ts.net" || c.Leaf.DNSNames[0] != "studio.tail1.ts.net" {
@@ -275,9 +294,22 @@ func TestSelfNameChange(t *testing.T) {
 	if _, err := c.Leaf.Verify(x509.VerifyOptions{Roots: roots(newCA), DNSName: "studio.tail1.ts.net"}); err != nil {
 		t.Error(err)
 	}
+
+	setName(selfName)
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if !readCA(t, s.Dir, selfName).Equal(oldCA) {
+		t.Error("switching back made yet another CA")
+	}
+	c, _ = s.GetCertificate(nil)
+	if _, err := c.Leaf.Verify(x509.VerifyOptions{Roots: roots(oldCA), DNSName: selfName}); err != nil {
+		t.Errorf("switching back doesn't serve a certificate from the first CA: %v", err)
+	}
 }
 
-// A CA too close to expiry to cover a full server certificate is replaced.
+// A CA too close to expiry to cover a full server certificate is replaced
+// at CAReplaceAt, and the old one is kept beside it.
 func TestSelfCAExpiry(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
@@ -285,30 +317,40 @@ func TestSelfCAExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, made, _ := EnsureCA(dir, selfName, ca.NotAfter.Add(-serverLife-24*time.Hour)); made {
+	if !CAReplaceAt(ca).Equal(ca.NotAfter.Add(-serverLife)) {
+		t.Errorf("CAReplaceAt %v", CAReplaceAt(ca))
+	}
+	if _, _, made, _ := EnsureCA(dir, selfName, CAReplaceAt(ca).Add(-24*time.Hour)); made {
 		t.Error("replaced a CA with more than a server lifetime left")
 	}
-	if _, _, made, _ := EnsureCA(dir, selfName, ca.NotAfter.Add(-serverLife+24*time.Hour)); !made {
+	if _, _, made, _ := EnsureCA(dir, selfName, CAReplaceAt(ca).Add(24*time.Hour)); !made {
 		t.Error("kept a CA that expires before the server certificate it would sign")
+	}
+	if kept, _ := filepath.Glob(filepath.Join(dir, selfName, "ca.pem.replaced-*")); len(kept) != 1 {
+		t.Errorf("old CA not kept: %v", kept)
 	}
 }
 
-// A key that doesn't match its certificate, as a torn write would leave,
-// is replaced rather than served.
-func TestSelfTornPair(t *testing.T) {
+// A file that won't load, as damage or a stray edit would leave, is
+// replaced: the server certificate silently, the CA after moving it aside.
+func TestSelfDamagedFiles(t *testing.T) {
 	s, _ := newSelf(t, selfName)
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := s.GetCertificate(nil)
-	_, _, _, keyFile := SelfFiles(s.Dir)
+	caFile, serverFile := SelfFiles(s.Dir, selfName)
+
+	// A key that doesn't match its certificate.
+	b, _ := os.ReadFile(serverFile)
 	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	der, _ := x509.MarshalPKCS8PrivateKey(other)
-	if err := writePrivate(keyFile, pemBlock("PRIVATE KEY", der)); err != nil {
+	cert, _ := pem.Decode(b)
+	if err := writePrivate(serverFile, append(pemBlock("CERTIFICATE", cert.Bytes), pemBlock("PRIVATE KEY", der)...)); err != nil {
 		t.Fatal(err)
 	}
 	again := &Self{Dir: s.Dir, Bin: s.Bin, Log: s.Log}
-	if err := again.Refresh(time.Now()); err != nil {
+	if err := again.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	c, _ := again.GetCertificate(nil)
@@ -318,21 +360,39 @@ func TestSelfTornPair(t *testing.T) {
 	if !c.PrivateKey.(*ecdsa.PrivateKey).PublicKey.Equal(c.Leaf.PublicKey) {
 		t.Error("new certificate and key don't match")
 	}
+
+	if err := os.WriteFile(caFile, []byte("not a certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, made, err := EnsureCA(s.Dir, selfName, time.Now()); err != nil || !made {
+		t.Fatalf("damaged CA not replaced (%v, %v)", made, err)
+	}
+	kept, _ := filepath.Glob(caFile + ".replaced-*")
+	if len(kept) != 1 {
+		t.Fatalf("damaged CA not kept: %v", kept)
+	}
+	if b, _ := os.ReadFile(kept[0]); string(b) != "not a certificate" {
+		t.Errorf("kept %q", b)
+	}
 }
 
 // Keys and certificates are readable only by the user.
 func TestSelfFileModes(t *testing.T) {
 	s, _ := newSelf(t, selfName)
-	if err := s.Refresh(time.Now()); err != nil {
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	caCert, caKey, cert, key := SelfFiles(s.Dir)
-	for _, f := range []string{caCert, caKey, cert, key} {
+	caFile, serverFile := SelfFiles(s.Dir, selfName)
+	for _, f := range []string{caFile, serverFile, filepath.Dir(caFile)} {
 		fi, err := os.Stat(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm() != 0o600 {
+		want := os.FileMode(0o600)
+		if fi.IsDir() {
+			want = 0o700
+		}
+		if fi.Mode().Perm() != want {
 			t.Errorf("%s is %v", filepath.Base(f), fi.Mode().Perm())
 		}
 	}
@@ -361,18 +421,57 @@ func TestSelfCAConcurrent(t *testing.T) {
 	}
 }
 
+// Run notices a CA that tally web --ca wrote without waiting a day.
+func TestSelfNoticesNewCA(t *testing.T) {
+	s, _ := newSelf(t, selfName)
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if s.caChanged() {
+		t.Fatal("changed right after loading")
+	}
+	caFile, _ := SelfFiles(s.Dir, selfName)
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(caFile, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if !s.caChanged() {
+		t.Fatal("a rewritten CA went unnoticed")
+	}
+	if err := s.Refresh(t.Context(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if s.caChanged() {
+		t.Error("still changed after reloading")
+	}
+}
+
 // Without Tailscale there is no name, so no certificate, and handshakes
-// fail with the reason.
+// fail with the reason. A tailscale CLI that hangs doesn't hang tally.
 func TestSelfNoTailscale(t *testing.T) {
 	s, _ := newSelf(t, "")
-	if err := s.Refresh(time.Now()); err == nil {
+	if err := s.Refresh(t.Context(), time.Now()); err == nil {
 		t.Fatal("refreshed with Tailscale stopped")
 	}
 	if _, err := s.GetCertificate(nil); err == nil || !strings.Contains(err.Error(), "MagicDNS") {
 		t.Errorf("GetCertificate: %v", err)
 	}
-	if _, err := MagicDNSName(""); err == nil {
+	if _, err := MagicDNSName(t.Context(), ""); err == nil {
 		t.Error("no tailscale CLI wasn't an error")
+	}
+
+	hang := filepath.Join(t.TempDir(), "tailscale")
+	if err := os.WriteFile(hang, []byte("#!/bin/sh\nexec sleep 60\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := MagicDNSName(ctx, hang); err == nil {
+		t.Error("a hung tailscale CLI wasn't an error")
+	}
+	if waited := time.Since(start); waited > 5*time.Second {
+		t.Errorf("waited %v for a hung tailscale CLI", waited)
 	}
 }
 
@@ -382,15 +481,15 @@ func TestCheckSelf(t *testing.T) {
 	if _, _, err := CheckSelf(s.Dir, selfName, now); err == nil {
 		t.Error("no files checked out")
 	}
-	if err := s.Refresh(now); err != nil {
+	if err := s.Refresh(t.Context(), now); err != nil {
 		t.Fatal(err)
 	}
-	server, ca, err := CheckSelf(s.Dir, selfName, now)
-	if err != nil || server.IsZero() || ca.IsZero() || !ca.After(server) {
-		t.Errorf("ok: server %v ca %v err %v", server, ca, err)
+	server, caReplace, err := CheckSelf(s.Dir, selfName, now)
+	if err != nil || server.IsZero() || !caReplace.Equal(CAReplaceAt(readCA(t, s.Dir, selfName))) {
+		t.Errorf("ok: server %v CA replaced %v err %v", server, caReplace, err)
 	}
 	if _, _, err := CheckSelf(s.Dir, "studio.tail1.ts.net", now); err == nil {
-		t.Error("a certificate for the old name checked out")
+		t.Error("a name with no CA checked out")
 	}
 }
 

@@ -61,21 +61,35 @@ HOME=$scratch HERDR_SOCKET_PATH=$socket "$tally" serve --web --web-cert self --n
 	--web-listen "$ip:$port" >"$out/serve.log" 2>&1 &
 serve_pid=$!
 for _ in $(seq 60); do grep -q 'browser pad certificate' "$out/serve.log" && break; sleep 0.5; done
-self=$scratch/.config/tally/web/self
-check "serve issued a certificate" test -s "$self/server.crt"
+if ! kill -0 "$serve_pid" 2>/dev/null || ! grep -q 'browser pad certificate' "$out/serve.log"; then
+	echo "FAIL  tally serve didn't start; see $out/serve.log" >&2
+	exit 1
+fi
+self=$scratch/.config/tally/web/self/$name
+check "serve issued a certificate" test -s "$self/server.pem"
 
 echo "== certificate, from this machine"
 echo | openssl s_client -connect "$ip:$port" -servername "$name" 2>/dev/null | openssl x509 -outform DER >"$scratch/served.der"
-openssl x509 -in "$self/ca.crt" -outform DER -out "$scratch/ca.der"
-check "the served certificate is the one on disk" cmp "$scratch/served.der" <(openssl x509 -in "$self/server.crt" -outform DER)
-check "openssl verifies it for the name" openssl verify -CAfile "$self/ca.crt" -verify_hostname "$name" "$self/server.crt"
-check "openssl refuses another name" not openssl verify -CAfile "$self/ca.crt" -verify_hostname example.com "$self/server.crt"
-check "curl trusting the CA gets the sign-in page" curl -sf --cacert "$self/ca.crt" -o /dev/null "$base/login"
+openssl x509 -in "$self/ca.pem" -outform DER -out "$scratch/ca.der"
+openssl x509 -in "$self/ca.pem" -out "$scratch/ca.pem"
+openssl x509 -in "$self/server.pem" -out "$scratch/server.pem"
+check "the served certificate is the one on disk" cmp "$scratch/served.der" <(openssl x509 -in "$self/server.pem" -outform DER)
+check "openssl verifies it for the name" openssl verify -CAfile "$scratch/ca.pem" -verify_hostname "$name" "$scratch/server.pem"
+check "openssl refuses another name" not openssl verify -CAfile "$scratch/ca.pem" -verify_hostname example.com "$scratch/server.pem"
+check "curl trusting the CA gets the sign-in page" curl -sf --cacert "$scratch/ca.pem" -o /dev/null "$base/login"
 check "curl without the CA is refused" not curl -sf -o /dev/null "$base/login"
 check "Apple's trust evaluation accepts it" \
 	bash -c "security verify-cert -c '$scratch/served.der' -r '$scratch/ca.der' -p ssl -s '$name' -L -l 2>&1 | grep -q 'verification successful'"
 check "Apple's trust evaluation refuses another name" \
 	bash -c "security verify-cert -c '$scratch/served.der' -r '$scratch/ca.der' -p ssl -s example.com -L -l 2>&1 | grep -q 'mismatch'"
+# Even the CA's own key can't make a certificate Apple accepts for signed mail.
+openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$scratch/mail.key" \
+	-subj /CN=ceo -addext subjectAltName=email:ceo@example.com -addext extendedKeyUsage=emailProtection \
+	-out "$scratch/mail.csr" 2>/dev/null
+openssl x509 -req -in "$scratch/mail.csr" -CA "$self/ca.pem" -CAkey "$self/ca.pem" -days 1 -copy_extensions copy \
+	-outform DER -out "$scratch/mail.der" 2>/dev/null
+check "Apple refuses signed mail from the CA's key" \
+	bash -c "test -s '$scratch/mail.der' && ! security verify-cert -c '$scratch/mail.der' -r '$scratch/ca.der' -p smime -e ceo@example.com -L -l 2>&1 | grep -q 'verification successful'"
 check "tally doctor: web cert ok" bash -c "HOME='$scratch' HERDR_SOCKET_PATH='$socket' '$tally' doctor 2>&1 | grep -q '^ok    web cert'"
 (cd "$scratch" && run web --ca >/dev/null)
 check "tally web --ca exports the CA" cmp "$scratch/tally-ca.cer" "$scratch/ca.der"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -138,7 +139,7 @@ func showWebSignIn(ws web.Store, pw string) error {
 // writeCA writes the CA for --web-cert self to tally-ca.cer in the current
 // directory, making it if tally serve hasn't yet, and says how to trust it.
 func writeCA(storeDir string) error {
-	name, err := web.MagicDNSName(web.FindTailscale())
+	name, err := web.MagicDNSName(context.Background(), web.FindTailscale())
 	if err != nil {
 		return err
 	}
@@ -157,13 +158,15 @@ func writeCA(storeDir string) error {
 		fmt.Println("made a new certificate authority; a running tally serve picks it up within a day, or restart it now")
 	}
 	fmt.Printf("wrote %s\n", out)
-	fmt.Printf("  it can only vouch for %s, and is valid until %s\n", name, ca.NotAfter.Format(time.DateOnly))
+	fmt.Printf("  it can only vouch for websites at %s; tally replaces it around %s\n", name, web.CAReplaceAt(ca).Format(time.DateOnly))
+	fmt.Println("  it names this machine, so AirDrop it or copy it over USB rather than emailing it")
 	fmt.Println()
 	fmt.Println("iPhone or iPad:")
-	fmt.Println("  1. AirDrop or email the file to it and open it")
+	fmt.Println("  1. AirDrop the file to it and open it")
 	fmt.Println("  2. Settings > Profile Downloaded > Install")
 	fmt.Println("  3. Settings > General > About > Certificate Trust Settings: turn on full trust for it")
-	fmt.Println("Mac: open the file, then in Keychain Access set it to Always Trust")
+	fmt.Println("Mac: security add-trusted-cert -p ssl -k ~/Library/Keychains/login.keychain-db " + out)
+	fmt.Println("  (trusts it for websites only; Keychain Access's Always Trust would trust it for everything)")
 	fmt.Println("Android: Settings > Security > Encryption & credentials > Install a certificate > CA certificate")
 	fmt.Println()
 	fmt.Println("then run tally web for a sign-in code")
