@@ -40,16 +40,19 @@ func checkWeb() []doctor.Result {
 	} else {
 		results = append(results, doctor.WebPassword(st.Password != "", len(st.Browsers)))
 	}
-	if serving.Cert == "self" {
-		return append(results, doctor.Result{Name: "web cert", Level: doctor.Info,
-			Detail: "tally's own certificate (--web-cert self); browsers warn until it is trusted on the device"})
-	}
-
 	name := ""
 	if bin := web.FindTailscale(); bin != "" {
 		if out, err := runCmd(bin, "status", "--json"); err == nil {
 			name = pairing.TailscaleName(out)
 		}
+	}
+	if serving.Cert == "self" {
+		var server, caReplace time.Time
+		var err error
+		if name != "" {
+			server, caReplace, err = web.CheckSelf(filepath.Join(store.Dir, "web", "self"), name, time.Now())
+		}
+		return append(results, doctor.WebSelfCert(name, server, caReplace, err, time.Now()))
 	}
 	var notAfter time.Time
 	var loadErr error

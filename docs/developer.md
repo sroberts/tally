@@ -88,6 +88,16 @@ HOME=$scratch tally serve --web --web-cert self --no-device --web-listen 127.0.0
 
 **Never send keys to live herdr panes** from tests or while developing: real agents run there. Test writes against the fake writer, `--dry-run`, or a scratch tab you create and close.
 
+### Testing --web-cert self on iOS
+
+`scripts/e2e-web-self.sh` checks tally's own CA end to end on a Mac. It runs a scratch tally on this machine's Tailscale address (port 47899), then checks the certificate with openssl, curl, Apple's trust evaluation and `tally doctor`. Last, it boots a throwaway iOS simulator and checks that Safari refuses a sign-in link until the CA is trusted (`simctl keychain add-root-cert`), then signs in with one.
+
+```bash
+OUT=/tmp/tally-e2e scripts/e2e-web-self.sh   # screenshots and serve.log land in $OUT
+```
+
+It needs Tailscale with MagicDNS, Xcode with an iOS runtime (`RUNTIME=` picks one; default the newest) and herdr's socket. It deletes the simulator and stops tally when it finishes. The screenshots show your machine's name and live agent states, so keep them to yourself. Adding the pad to the home screen and installing the profile by hand stay manual: try them on a real phone before releasing a certificate change.
+
 ### Installing your build
 
 ```bash

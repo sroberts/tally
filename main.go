@@ -33,8 +33,9 @@ commands:
                                    run one pad action against herdr
   pair [--label NAME] [--json] | --list | --revoke NAME
                                    pair a phone (prints a QR code), list or revoke phones
-  web [--set-password [--password-stdin]] | --list | --revoke ID|all
-                                   set the browser pad's password, list or sign out browsers;
+  web [--set-password [--password-stdin]] | --list | --revoke ID|all | --ca
+                                   set the browser pad's password, list or sign out browsers,
+                                   or write the CA to trust for --web-cert self;
                                    with no flags, show where to open it
   install-agent [--remote] [--listen ADDR] [--web] [--web-listen ADDR] [--web-cert MODE]
                 [--no-device] [--port PATH] [--slots N]

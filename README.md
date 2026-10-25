@@ -78,7 +78,23 @@ tally web --revoke 3f9a01c2  # sign one out, or --revoke all
 
 The pad always has a password, and the password never goes in a URL. Repeated wrong guesses are slowed down. Your agents' titles, paths and terminal output never leave the machine: the pad sees only each agent's state.
 
-Getting the Tailscale certificate publishes the machine's `*.ts.net` name in public Certificate Transparency logs. To avoid that, add `--web-cert self` to use tally's own certificate instead; browsers warn until you trust it on the device. `--web-listen ADDR` narrows where the pad listens (default `:47825`).
+`--web-listen ADDR` narrows where the pad listens (default `:47825`).
+
+### Keep your machine's name private
+
+Tailscale's certificate comes from Let's Encrypt, and every such certificate is published in public [Certificate Transparency](https://certificate.transparency.dev) logs, so anyone can see your machine's `<machine>.<tailnet>.ts.net` name. To keep it out, tally can sign its own certificate instead. You trust tally's certificate authority once on each device that opens the pad. It still needs Tailscale and MagicDNS, but not HTTPS certificates.
+
+1. **Switch tally to its own certificate:**
+   ```bash
+   tally install-agent --web --web-cert self
+   tally web --ca          # writes tally-ca.cer here
+   ```
+2. **Trust the CA on your iPhone or iPad:** AirDrop `tally-ca.cer` to it and open it. Don't email it: it carries your machine's name, which this setup exists to keep private. Then go to Settings → Profile Downloaded → Install, and finally Settings → General → About → Certificate Trust Settings and turn on full trust for **tally CA for <your machine>**. Skip that last step and Safari warns before every visit, and the pad on your home screen gets stuck on the warning with no way past it.
+   - **Mac:** `security add-trusted-cert -p ssl -k ~/Library/Keychains/login.keychain-db tally-ca.cer` trusts it for websites only. Keychain Access's **Always Trust** would trust it for mail and code signing too.
+   - **Android:** Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
+3. **Scan the sign-in code** from `tally web`, as above.
+
+tally renews the pad's certificate itself, about once a year, with nothing to redo on your devices. The CA can only vouch for websites at this machine's MagicDNS name, so even its key is no use for other sites, signed mail or IP addresses. If you rename the machine, tally makes a CA for the new name, and you trust that on each device; switch back and the old one still works. About nine years in, tally replaces the CA with a new one to trust. `tally doctor` warns two months ahead.
 
 ## The hardware pad
 
@@ -95,6 +111,7 @@ If you never use the hardware pad, `--no-device` stops tally looking for it.
 | `tally doctor` | Check herdr, the background agent, the browser pad and the hardware pad |
 | `tally status` | List herdr's agents in slot order |
 | `tally web` | Show a sign-in QR code for the browser pad |
+| `tally web --ca` | Write tally's certificate authority to trust, for `--web-cert self` |
 | `tally serve [--web]` | Run tally in this terminal instead of the background |
 | `tally version` | Print tally's version |
 

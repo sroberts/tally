@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ func webCmd(args []string) error {
 	fromStdin := fs.Bool("password-stdin", false, "with --set-password, read the password from stdin instead of prompting")
 	list := fs.Bool("list", false, "list signed-in browsers")
 	revoke := fs.String("revoke", "", "sign out the browser with this id (from --list), or all")
+	exportCA := fs.Bool("ca", false, "write tally's certificate authority for --web-cert self to tally-ca.cer, to trust on your devices")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
@@ -55,6 +58,8 @@ func webCmd(args []string) error {
 				b.Created.Local().Format("2006-01-02 15:04"), b.LastSeen.Local().Format("2006-01-02 15:04"))
 		}
 		return nil
+	case *exportCA:
+		return writeCA(store.Dir)
 	case *revoke != "":
 		n, err := ws.Revoke(*revoke)
 		if err != nil {
@@ -125,9 +130,46 @@ func showWebSignIn(ws web.Store, pw string) error {
 		fmt.Printf("  password  set; %d browser(s) signed in (tally web --list)\n", len(st.Browsers))
 	}
 	if serving.Cert == "self" {
-		fmt.Println("  tally serves its own certificate (--web-cert self), so the browser warns until you trust it on the device")
+		fmt.Println("  the pad's certificate is from tally's own CA (--web-cert self): trust it once on each device first (tally web --ca)")
 	}
 	fmt.Println("  run tally web again for a fresh code")
+	return nil
+}
+
+// writeCA writes the CA for --web-cert self to tally-ca.cer in the current
+// directory, making it if tally serve hasn't yet, and says how to trust it.
+func writeCA(storeDir string) error {
+	name, err := web.MagicDNSName(context.Background(), web.FindTailscale())
+	if err != nil {
+		return err
+	}
+	ca, _, made, err := web.EnsureCA(filepath.Join(storeDir, "web", "self"), name, time.Now())
+	if err != nil {
+		return err
+	}
+	out, err := filepath.Abs("tally-ca.cer")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(out, ca.Raw, 0o644); err != nil {
+		return err
+	}
+	if made {
+		fmt.Println("made a new certificate authority; a running tally serve picks it up within a day, or restart it now")
+	}
+	fmt.Printf("wrote %s\n", out)
+	fmt.Printf("  it can only vouch for websites at %s; tally replaces it around %s\n", name, web.CAReplaceAt(ca).Format(time.DateOnly))
+	fmt.Println("  it names this machine, so AirDrop it or copy it over USB rather than emailing it")
+	fmt.Println()
+	fmt.Println("iPhone or iPad:")
+	fmt.Println("  1. AirDrop the file to it and open it")
+	fmt.Println("  2. Settings > Profile Downloaded > Install")
+	fmt.Println("  3. Settings > General > About > Certificate Trust Settings: turn on full trust for it")
+	fmt.Println("Mac: security add-trusted-cert -p ssl -k ~/Library/Keychains/login.keychain-db " + out)
+	fmt.Println("  (trusts it for websites only; Keychain Access's Always Trust would trust it for everything)")
+	fmt.Println("Android: Settings > Security > Encryption & credentials > Install a certificate > CA certificate")
+	fmt.Println()
+	fmt.Println("then run tally web for a sign-in code")
 	return nil
 }
 

@@ -22,8 +22,7 @@ type Certs interface {
 	GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
-// Static serves one fixed certificate: tally's own self-signed one, for
-// --web-cert self. Browsers warn until it is trusted on the device.
+// Static serves one fixed certificate.
 type Static struct {
 	Cert tls.Certificate
 }
