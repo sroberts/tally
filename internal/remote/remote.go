@@ -452,7 +452,11 @@ func (ss *session) work(ctx context.Context, queue <-chan Action, acks chan<- Ac
 				ack.Msg = ae.Message
 			}
 		} else if err != nil {
-			ack.Err, ack.Msg = actions.HerdrError, err.Error()
+			ack.Err, ack.Msg = actions.HerdrError, actions.CallFailed
+		}
+		if err != nil && (ae == nil || ae.Err != nil) {
+			// The detail stays here: the client gets fixed text.
+			ss.s.cfg.Log.Info("action failed", "phone", ss.label, "name", a.Name, "err", err)
 		}
 		ss.s.cfg.Log.Debug("action", "phone", ss.label, "name", a.Name, "target", a.Target, "slot", a.Slot, "ok", ack.OK, "err", ack.Err)
 		select {

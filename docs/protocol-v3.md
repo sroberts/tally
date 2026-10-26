@@ -85,7 +85,7 @@ Codes: `N` blocked, `G` done and unseen, `W` working, `R` idle, `U` unknown.
 | `target_gone` | the pane closed or isn't an agent; or a FLEET action had nothing to act on (empty slot, no agent waiting, no previous pane) |
 | `herdr_offline` | tally can't reach herdr |
 | `bad_action` | unknown action name or missing or invalid field |
-| `herdr_error` | herdr rejected the call; `msg` carries herdr's text (`busy` when 16 actions are already queued) |
+| `herdr_error` | herdr rejected the call; `msg` carries herdr's text (`busy` when 16 actions are already queued, `herdr call failed` when the call failed without herdr saying why) |
 | `expired` | reserved; the phone drops actions it can't write within 500 ms and never retries |
 
 Close statuses: 1008 auth failed or phone revoked, 1009 message too big, 1001 tally stopping or no

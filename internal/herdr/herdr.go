@@ -52,7 +52,8 @@ type Error struct {
 
 func (e *Error) Error() string { return "herdr: " + e.Code + ": " + e.Message }
 
-// OfflineError means herdr's socket did not accept a connection.
+// OfflineError means herdr's socket did not accept a connection or the
+// request written to it.
 type OfflineError struct {
 	Path string
 	Err  error
@@ -122,7 +123,7 @@ func dial(path, method string, params any) (net.Conn, error) {
 	conn.SetDeadline(time.Now().Add(Timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
 		conn.Close()
-		return nil, err
+		return nil, &OfflineError{Path: path, Err: err}
 	}
 	return conn, nil
 }

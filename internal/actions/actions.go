@@ -26,6 +26,11 @@ const (
 	HerdrError   = "herdr_error"   // herdr rejected the call
 )
 
+// CallFailed is the message for a herdr call that failed without herdr
+// saying why: a timeout, a dropped connection or an unreadable answer. The
+// detail stays on the host.
+const CallFailed = "herdr call failed"
+
 // MaxText is the longest insert_text, in characters.
 const MaxText = 4000
 
@@ -34,17 +39,26 @@ const MaxText = 4000
 const RewindGap = 80 * time.Millisecond
 
 // Error is an action's failure, with the ack code the phone shows.
+// Message is what clients see; Err, when set, is the cause, which only
+// tally's own output shows.
 type Error struct {
 	Code    string
 	Message string
+	Err     error
 }
 
 func (e *Error) Error() string {
-	if e.Message == "" {
-		return e.Code
+	s := e.Code
+	if e.Message != "" {
+		s += ": " + e.Message
 	}
-	return e.Code + ": " + e.Message
+	if e.Err != nil {
+		s += ": " + e.Err.Error()
+	}
+	return s
 }
+
+func (e *Error) Unwrap() error { return e.Err }
 
 func fail(code, format string, args ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
@@ -344,5 +358,5 @@ func herdrErr(err error) error {
 		}
 		return &Error{Code: HerdrError, Message: he.Message}
 	}
-	return &Error{Code: HerdrError, Message: err.Error()}
+	return &Error{Code: HerdrError, Message: CallFailed, Err: err}
 }
