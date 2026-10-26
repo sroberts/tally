@@ -423,8 +423,13 @@ func (ss *session) read(ctx context.Context, queue chan<- Action, acks chan<- Ac
 		select {
 		case queue <- msg.Action:
 		default:
-			// The phone drops anything older than 500 ms anyway.
-			acks <- Ack{T: "ack", ID: msg.ID, Err: actions.HerdrError, Msg: "busy"}
+			// The phone drops anything older than 500 ms anyway. Once the
+			// session ends nobody reads acks, so don't wait for it.
+			select {
+			case acks <- Ack{T: "ack", ID: msg.ID, Err: actions.HerdrError, Msg: "busy"}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 }
