@@ -138,12 +138,21 @@ func headers(next http.Handler) http.Handler {
 	})
 }
 
+// Timeouts for one request and its response. Every page is small, and
+// net/http clears a connection's deadlines when /ws hijacks it, so they
+// never cut a pad's WebSocket short. Variables so tests can shorten them.
+var (
+	readTimeout  = 10 * time.Second
+	writeTimeout = 30 * time.Second
+)
+
 // Serve accepts browsers on ln, a plain TCP listener, until ctx is done.
-// It wraps ln in TLS itself.
+// It wraps ln in TLS 1.3 itself.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	tc := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.cfg.Certs.GetCertificate}
+	tc := &tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: s.cfg.Certs.GetCertificate}
 	srv := &http.Server{Handler: s.Handler(), TLSConfig: tc,
-		ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 2 * time.Minute,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: readTimeout, WriteTimeout: writeTimeout,
+		IdleTimeout: 2 * time.Minute,
 		ErrorLog:    slog.NewLogLogger(s.cfg.Log.Handler(), slog.LevelDebug),
 		BaseContext: func(net.Listener) context.Context { return ctx }}
 	go s.watchRevocations(ctx)
