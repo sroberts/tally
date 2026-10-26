@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/sroberts/tally/internal/files"
 )
 
 // Port is the remote listener's TLS WebSocket port.
@@ -98,18 +100,7 @@ func (s Store) save(st State) error {
 	if err != nil {
 		return err
 	}
-	return writeFile(s.File(), append(b, '\n'))
-}
-
-func writeFile(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil { // WriteFile keeps an old file's mode
-		return err
-	}
-	return os.Rename(tmp, path)
+	return files.WritePrivate(s.File(), append(b, '\n'))
 }
 
 // HostID returns this host's id, making one on first use.
@@ -291,8 +282,8 @@ func (s Store) makeCertificate(hostName string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeFile(s.KeyFile(), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})); err != nil {
+	if err := files.WritePrivate(s.KeyFile(), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})); err != nil {
 		return err
 	}
-	return writeFile(s.CertFile(), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	return files.WritePrivate(s.CertFile(), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }

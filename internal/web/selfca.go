@@ -19,9 +19,9 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 
+	"github.com/sroberts/tally/internal/files"
 	"github.com/sroberts/tally/internal/pairing"
 )
 
@@ -185,16 +185,15 @@ func EnsureCA(dir, name string, now time.Time) (ca *x509.Certificate, key *ecdsa
 	if err := os.MkdirAll(filepath.Dir(caFile), 0o700); err != nil {
 		return nil, nil, false, err
 	}
-	lock, err := os.OpenFile(filepath.Join(dir, "ca.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return nil, nil, false, err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	err = files.Locked(filepath.Join(dir, "ca.lock"), func() error {
+		ca, key, made, err = ensureCA(caFile, name, now)
+		return err
+	})
+	return ca, key, made, err
+}
 
+// ensureCA is EnsureCA once it holds the lock.
+func ensureCA(caFile, name string, now time.Time) (ca *x509.Certificate, key *ecdsa.PrivateKey, made bool, err error) {
 	ca, key, err = loadPair(caFile)
 	if err == nil && CACovers(ca, name) && now.Before(CAReplaceAt(ca)) {
 		return ca, key, false, nil
@@ -370,13 +369,4 @@ func setAside(path string, now time.Time) error {
 	return os.Rename(path, path+".replaced-"+now.UTC().Format("20060102T150405Z"))
 }
 
-func writePrivate(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil { // WriteFile keeps an old file's mode
-		return err
-	}
-	return os.Rename(tmp, path)
-}
+func writePrivate(path string, b []byte) error { return files.WritePrivate(path, b) }
