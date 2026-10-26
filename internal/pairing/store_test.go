@@ -73,14 +73,14 @@ func TestConcurrentHostIDAgree(t *testing.T) {
 // revoking keep it.
 func TestSetListen(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
-	if err := s.SetListen("100.64.0.1:48000"); err != nil {
+	if _, err := s.SetListen("100.64.0.1:48000"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Issue("phone", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetListen("100.64.0.1:48000"); err != nil { // unchanged
-		t.Fatal(err)
+	if prev, err := s.SetListen("100.64.0.1:48000"); err != nil || prev != "100.64.0.1:48000" { // unchanged
+		t.Fatal(prev, err)
 	}
 	if err := s.Revoke("phone"); err != nil {
 		t.Fatal(err)
@@ -88,5 +88,29 @@ func TestSetListen(t *testing.T) {
 	st, err := s.Load()
 	if err != nil || st.Listen != "100.64.0.1:48000" || st.HostID == "" {
 		t.Errorf("state %+v, %v", st, err)
+	}
+}
+
+// A tally serve run by hand puts back the agent's address when it stops,
+// unless another tally has recorded its own since.
+func TestRestoreListen(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	s.SetListen(":47824") // the agent
+	prev, err := s.SetListen("127.0.0.1:47999")
+	if err != nil || prev != ":47824" {
+		t.Fatalf("prev %q, %v", prev, err)
+	}
+	if err := s.RestoreListen("127.0.0.1:47999", prev); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Load(); st.Listen != ":47824" {
+		t.Errorf("after restoring: %q", st.Listen)
+	}
+
+	prev, _ = s.SetListen("127.0.0.1:47999")
+	s.SetListen(":48000") // the agent restarted with a new --listen meanwhile
+	s.RestoreListen("127.0.0.1:47999", prev)
+	if st, _ := s.Load(); st.Listen != ":48000" {
+		t.Errorf("restored over a newer address: %q", st.Listen)
 	}
 }

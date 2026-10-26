@@ -110,6 +110,9 @@ func (c *Client) send(method string, params any) (net.Conn, error) {
 	return dial(c.Path, method, params)
 }
 
+// dialSocket opens herdr's socket; tests replace it.
+var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("unix", path, Timeout) }
+
 // dial connects to herdr at path and writes one request. Callers check
 // their allowlist first.
 func dial(path, method string, params any) (net.Conn, error) {
@@ -125,7 +128,7 @@ func dial(path, method string, params any) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := net.DialTimeout("unix", path, Timeout)
+	conn, err := dialSocket(path)
 	if err != nil {
 		return nil, &OfflineError{Path: path, Err: err}
 	}

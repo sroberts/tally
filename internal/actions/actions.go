@@ -313,7 +313,7 @@ func (t *Table) open(s *herdr.Snapshot, cmd herdr.Command) error {
 	if err != nil {
 		// herdr's message may quote the cwd; keep only the code.
 		if e, ok := herdrErr(err).(*Error); ok && e.Code != HerdrOffline {
-			return &Error{Code: e.Code, Message: "tab.create failed"}
+			return &Error{Code: e.Code, Message: "tab.create failed", Err: e.Err} // Err is never herdr's text
 		}
 		return err
 	}

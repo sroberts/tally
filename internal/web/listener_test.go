@@ -17,7 +17,7 @@ import (
 func TestListenerRefusesTLS12(t *testing.T) {
 	h := start(t)
 	old := remote.PinnedTLS(h.fp)
-	old.MaxVersion = tls.VersionTLS12
+	old.MinVersion, old.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
 	if c, err := tls.Dial("tcp", h.addr, old); err == nil {
 		c.Close()
 		t.Fatal("a TLS 1.2 handshake succeeded")

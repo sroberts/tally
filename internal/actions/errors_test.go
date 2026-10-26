@@ -21,3 +21,16 @@ func TestUnexplainedFailuresSendFixedText(t *testing.T) {
 		t.Errorf("lost the cause: %v", err)
 	}
 }
+
+// A failed tab.create keeps its cause for tally's log, but never herdr's
+// text, which may quote the cwd.
+func TestTabCreateFailureKeepsItsCause(t *testing.T) {
+	cause := errors.New("herdr: reading tab.create response: EOF")
+	f := newFixture()
+	f.table.W = &failingWriter{err: cause}
+	err := f.table.Do(Request{Name: "new_claude"})
+	var e *Error
+	if !errors.As(err, &e) || e.Code != HerdrError || e.Message != "tab.create failed" || !errors.Is(err, cause) {
+		t.Errorf("err = %#v", err)
+	}
+}

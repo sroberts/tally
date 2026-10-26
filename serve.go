@@ -128,9 +128,17 @@ func serve(args []string) error {
 			return fmt.Errorf("remote listener: %w", err)
 		}
 		log.Info("remote listener", "addr", ln.Addr().String())
-		// So tally pair and tally doctor know which port to use.
-		if err := srv.Store().SetListen(*listen); err != nil {
+		// So tally pair and tally doctor know which port to use. On the way
+		// out, put back what was there: a run by hand mustn't leave its
+		// --listen behind for the background agent's pairings.
+		if prev, err := srv.Store().SetListen(*listen); err != nil {
 			log.Warn("remote.json", "err", err)
+		} else {
+			defer func() {
+				if err := srv.Store().RestoreListen(*listen, prev); err != nil {
+					log.Warn("remote.json", "err", err)
+				}
+			}()
 		}
 		wg.Go(func() {
 			if err := srv.Serve(ctx, ln); err != nil {

@@ -158,13 +158,32 @@ func (s Store) HostID() (string, error) {
 }
 
 // SetListen records the address tally serve --remote listens on, so tally
-// pair puts its port in the QR code and tally doctor probes it.
-func (s Store) SetListen(addr string) error {
+// pair puts its port in the QR code and tally doctor probes it. It returns
+// the address recorded before, for RestoreListen.
+func (s Store) SetListen(addr string) (prev string, err error) {
+	return prev, s.swapListen(func(cur string) (string, bool) {
+		prev = cur
+		return addr, true
+	})
+}
+
+// RestoreListen puts back prev, the address SetListen replaced with addr,
+// unless something has recorded another address since. A tally serve run
+// by hand calls it on the way out, so it doesn't leave its --listen behind
+// for the background agent's pairings.
+func (s Store) RestoreListen(addr, prev string) error {
+	return s.swapListen(func(cur string) (string, bool) { return prev, cur == addr })
+}
+
+// swapListen replaces the recorded address with what f returns for the
+// current one, when f says to.
+func (s Store) swapListen(f func(cur string) (next string, ok bool)) error {
 	err := s.update(func(st *State) error {
-		if st.Listen == addr {
+		next, ok := f(st.Listen)
+		if !ok || next == st.Listen {
 			return errUnchanged
 		}
-		st.Listen = addr
+		st.Listen = next
 		return nil
 	})
 	if err == errUnchanged {

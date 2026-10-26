@@ -209,7 +209,7 @@ Newline-delimited JSON over the CircuitPython USB CDC data port, protocol versio
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `v` | int | Protocol version. Firmware shows `UPDATE FW` and ignores frames above its supported version. |
+| `v` | int | Protocol version. Firmware shows `UPDATE FW` and ignores frames above its supported version. It also drops frames with an older or non-integer `v`, so its link goes stale until tally sends the version it speaks. |
 | `seq` | uint32 | Increments per frame; resets on daemon restart. Debug display only. |
 | `slots` | array, length = `slots` config | State code per sidebar slot 1..N (`N`, `G`, `W`, `R`, `U`), `null` when empty. |
 | `focus` | int or null | Focused slot, 1-based. `0` when the focused agent sits beyond the slots; `null` when the focus is not an agent. |

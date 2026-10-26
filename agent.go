@@ -166,7 +166,7 @@ func (o agentOptions) install(program, home string, ws web.Store, pw string) err
 	}
 	if o.remote {
 		// So tally pair shows the port the agent will listen on.
-		if err := (pairing.Store{Dir: ws.Dir}).SetListen(remoteListen(o.listen)); err != nil {
+		if _, err := (pairing.Store{Dir: ws.Dir}).SetListen(remoteListen(o.listen)); err != nil {
 			return err
 		}
 	}
