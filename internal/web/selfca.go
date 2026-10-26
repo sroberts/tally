@@ -15,14 +15,12 @@ import (
 	"math/big"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/sroberts/tally/internal/files"
-	"github.com/sroberts/tally/internal/pairing"
 )
 
 // Lifetimes for --web-cert self. Apple refuses server certificates valid
@@ -32,7 +30,6 @@ const (
 	caLife      = 10 * 365 * 24 * time.Hour
 	serverLife  = 397 * 24 * time.Hour
 	serverRenew = 30 * 24 * time.Hour // reissue when this little is left
-	statusWait  = 10 * time.Second    // for tailscale status
 )
 
 // Self serves a certificate from tally's own certificate authority, for
@@ -142,25 +139,6 @@ func (s *Self) refresh(ctx context.Context, now time.Time) error {
 		s.Log.Info("browser pad certificate", "name", name, "expires", cert.Leaf.NotAfter.Format(time.DateOnly))
 	}
 	return nil
-}
-
-// MagicDNSName asks the tailscale CLI at bin for this machine's MagicDNS
-// name.
-func MagicDNSName(ctx context.Context, bin string) (string, error) {
-	if bin == "" {
-		return "", errors.New("the tailscale CLI is not installed")
-	}
-	ctx, cancel := context.WithTimeout(ctx, statusWait)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "status", "--json").Output()
-	if err != nil {
-		return "", fmt.Errorf("tailscale status: %w", err)
-	}
-	name := pairing.TailscaleName(out)
-	if name == "" {
-		return "", errors.New("tailscale is not running or this machine has no MagicDNS name")
-	}
-	return name, nil
 }
 
 // SelfFiles are where --web-cert self keeps the CA and the server

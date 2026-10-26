@@ -15,6 +15,7 @@ import (
 	"github.com/sroberts/tally/internal/herdr"
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/remote"
+	"github.com/sroberts/tally/internal/web"
 )
 
 // checkRemote checks the remote listener's side: the listener, paired phones,
@@ -50,7 +51,7 @@ func checkRemote() []doctor.Result {
 		results = append(results, doctor.Result{Name: "bonjour", Level: doctor.Info, Detail: "not checked: the listener is not running"})
 	}
 
-	out, err := runCmd("tailscale", "status", "--json")
+	out, err := web.TailscaleStatus(context.Background(), web.FindTailscale())
 	results = append(results, doctor.Tailscale(out, err))
 	results = append(results, checkFirewall(listening, fp, addrs))
 	return append(results, checkWritePath())

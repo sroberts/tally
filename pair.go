@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/sroberts/tally/internal/pairing"
+	"github.com/sroberts/tally/internal/web"
 )
 
 func pair(args []string) error {
@@ -57,10 +59,7 @@ func pair(args []string) error {
 	if err != nil {
 		return err
 	}
-	ts := ""
-	if out, err := runCmd("tailscale", "status", "--json"); err == nil {
-		ts = pairing.TailscaleName(out)
-	}
+	ts, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
 	p := pairing.Payload{V: pairing.ProtocolVersion, HostID: hostID, HostName: host, CertSHA256: fp, Token: token,
 		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), pairing.Port)}
 

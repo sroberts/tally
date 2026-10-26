@@ -95,12 +95,7 @@ func showWebSignIn(ws web.Store, pw string) error {
 	}
 	serving := webServing(st)
 	port := listenPort(serving.Listen, web.Port)
-	name := ""
-	if bin := web.FindTailscale(); bin != "" {
-		if out, err := runCmd(bin, "status", "--json"); err == nil {
-			name = pairing.TailscaleName(out)
-		}
-	}
+	name, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
 	if name == "" {
 		fmt.Println("tailscale is not running here, so the browser pad has no trusted address.")
 		fmt.Println("start tailscale, then run tally web again.")
