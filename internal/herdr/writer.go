@@ -1,10 +1,6 @@
 package herdr
 
-import (
-	"bufio"
-	"encoding/json"
-	"fmt"
-)
+import "fmt"
 
 // writeAllowed lists every method a Writer may call. It exists only while
 // tally serve --remote (or tally act) runs; the read-only Client never sees
@@ -55,20 +51,7 @@ func (w *Writer) call(method string, params any, out any) error {
 	if !writeAllowed[method] {
 		return fmt.Errorf("herdr: method %q is not on Tally's write allowlist", method)
 	}
-	conn, err := dial(w.Path, method, params)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	line, err := bufio.NewReaderSize(conn, 64*1024).ReadBytes('\n')
-	if err != nil {
-		return fmt.Errorf("herdr: reading %s response: %w", method, err)
-	}
-	result, err := decode(method, line)
-	if err != nil || out == nil {
-		return err
-	}
-	return json.Unmarshal(result, out)
+	return call(w.Path, method, params, out)
 }
 
 // SendKeys presses keys in the pane, in order.

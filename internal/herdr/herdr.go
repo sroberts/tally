@@ -76,7 +76,16 @@ func New(path string) *Client { return &Client{Path: path} }
 
 // Call sends one request and decodes the response's result into out.
 func (c *Client) Call(method string, params any, out any) error {
-	conn, err := c.send(method, params)
+	if !allowed[method] {
+		return fmt.Errorf("herdr: method %q is not on Tally's read-only allowlist", method)
+	}
+	return call(c.Path, method, params, out)
+}
+
+// call dials herdr at path, sends one request and decodes the response's
+// result into out. Callers check their allowlist first.
+func call(path, method string, params any, out any) error {
+	conn, err := dial(path, method, params)
 	if err != nil {
 		return err
 	}
