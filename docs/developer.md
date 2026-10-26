@@ -32,13 +32,21 @@ Work follows GitHub Flow:
 
 1. **Branch** off an up-to-date `main` with a short kebab-case name (`web-pad`, `scrub-ios`). The hooks refuse commits and pushes on `main`.
 2. **Commit** in small, complete steps. The subject is one plain sentence saying what changed (`Harden browser pad sign-in after review`), with no type prefix and no trailing period. The body says why, and lists the pieces when there are several.
-3. **Push the branch and open a PR.** The description summarizes the change, names anything deliberately left alone, and says what was tested.
+3. **Push the branch and open a PR.** The description summarizes the change, names anything deliberately left alone, and says what was tested. The PR template has a heading for each.
 4. **Review before merging.** Each PR gets a code review. Findings are fixed on the branch, in their own commit, and the tests run again.
 5. **Merge on GitHub with a merge commit**, never squash or rebase. Then pull `main` and, if you run tally from your build, reinstall it (below).
 
 Tests are the contract. Fix the code to pass them; change an existing test only with the owner's explicit sign-off.
 
-CI (`.github/workflows/ci.yml`) runs gofmt, `go vet` and `go test -short` on Linux and macOS for every PR and every push to `main`; a PR merges only when it's green.
+CI (`.github/workflows/ci.yml`) runs gofmt, `go vet` and `go test -short -race` on Linux and macOS for every PR and every push to `main`, plus staticcheck and govulncheck once on Linux; a PR merges only when it's green. Run the same checks locally with the versions CI pins:
+
+```bash
+go test -short -race ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+```
+
+Workflow actions are pinned to commit SHAs with the version in a comment. Dependabot (`.github/dependabot.yml`) proposes Go module and action updates weekly; review them like any other PR. `go.mod`'s `toolchain` line sets the Go release CI and releases build with, while the `go` line stays the oldest Go that can install tally.
 
 ### The website
 
@@ -47,10 +55,10 @@ CI (`.github/workflows/ci.yml`) runs gofmt, `go vet` and `go test -short` on Lin
 ### Releasing
 
 1. On an up-to-date `main` with green CI, tag the release: `git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0`. Pushing a tag is the one push to the remote that isn't a branch.
-2. The release workflow (`.github/workflows/release.yml`) runs GoReleaser on macOS: macOS builds need cgo for serial port discovery, Linux builds are pure Go. It publishes archives for macOS and Linux (arm64 and amd64), checksums and notes generated from the merged PRs, and stamps the version into `tally version` and the `hello` message.
-3. Check the release page, then `go install github.com/sroberts/tally@latest` picks up the tag.
+2. The release workflow (`.github/workflows/release.yml`) runs `go vet` and `go test -short`, then GoReleaser on macOS: macOS builds need cgo for serial port discovery, Linux builds are pure Go. It publishes archives for macOS and Linux (arm64 and amd64), an SPDX SBOM per archive (made with syft), checksums and notes generated from the merged PRs, and stamps the version into `tally version` and the `hello` message. It also attests build provenance for the archives, SBOMs and checksums.
+3. Check the release page and an attestation (`gh attestation verify tally_0.5.0_darwin_arm64.tar.gz --repo sroberts/tally`), then `go install github.com/sroberts/tally@latest` picks up the tag.
 
-To try the release build without publishing, run the release workflow by hand (Actions → release → Run workflow); it builds a snapshot and attaches the archives as an artifact. Versions follow semver; while tally is 0.x, a minor bump can change behavior.
+To try the release build without publishing, run the release workflow by hand (Actions → release → Run workflow); it builds a snapshot and attaches the archives, SBOMs and checksums as an artifact. To check `.goreleaser.yaml` locally, run `go run github.com/goreleaser/goreleaser/v2@v2.19.0 check`; a local snapshot (`release --snapshot --clean`) needs `syft` on your `PATH` and writes to `dist/`. Versions follow semver; while tally is 0.x, a minor bump can change behavior.
 
 ## Build, test, run
 
