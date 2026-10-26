@@ -24,11 +24,17 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# One SPDX SBOM per archive, made with syft.
+sboms:
+  - artifacts: archive
+
 changelog:
   use: github
   filters:
     exclude: ["^Merge pull request"]
 
 release:
+  # Published by the release workflow once the provenance attestation exists.
+  draft: true
   footer: |
     Install with Go: `go install github.com/sroberts/tally@{{ .Tag }}`, or download the archive for your system below.
