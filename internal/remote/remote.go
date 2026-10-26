@@ -123,6 +123,9 @@ func (s *Server) Publish(u daemon.Update) {
 	}
 }
 
+// Store is where the server reads paired phones.
+func (s *Server) Store() pairing.Store { return s.cfg.Store }
+
 func (s *Server) tracked() slots.Tracked {
 	s.mu.Lock()
 	defer s.mu.Unlock()

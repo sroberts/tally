@@ -59,9 +59,13 @@ func pair(args []string) error {
 	if err != nil {
 		return err
 	}
+	st, err := store.Load()
+	if err != nil {
+		return err
+	}
 	ts, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
 	p := pairing.Payload{V: pairing.ProtocolVersion, HostID: hostID, HostName: host, CertSHA256: fp, Token: token,
-		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), pairing.Port)}
+		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), remotePort(st))}
 
 	pairing.RenderQR(os.Stdout, p)
 	fmt.Printf("scan this on your phone to pair it. it is shown once.\n")

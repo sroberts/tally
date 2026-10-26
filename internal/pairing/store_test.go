@@ -68,3 +68,25 @@ func TestConcurrentHostIDAgree(t *testing.T) {
 		t.Errorf("remote.json has %q, callers got %q", st.HostID, ids[0])
 	}
 }
+
+// SetListen records tally serve's --listen for tally pair, and pairing and
+// revoking keep it.
+func TestSetListen(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	if err := s.SetListen("100.64.0.1:48000"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Issue("phone", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetListen("100.64.0.1:48000"); err != nil { // unchanged
+		t.Fatal(err)
+	}
+	if err := s.Revoke("phone"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil || st.Listen != "100.64.0.1:48000" || st.HostID == "" {
+		t.Errorf("state %+v, %v", st, err)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sroberts/tally/internal/launchd"
+	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/slots"
 	"github.com/sroberts/tally/internal/systemd"
 	"github.com/sroberts/tally/internal/web"
@@ -106,8 +107,17 @@ func installAgent(args []string) error {
 	} else {
 		err = installLaunchd(launchd.Agent{Program: program, Args: serveArgs, Env: env}, home, runs)
 	}
-	if err != nil || !*webOn {
+	if err != nil {
 		return err
+	}
+	if *remoteOn {
+		// So tally pair shows the port the agent will listen on.
+		if err := (pairing.Store{Dir: ws.Dir}).SetListen(remoteListen(*listen)); err != nil {
+			return err
+		}
+	}
+	if !*webOn {
+		return nil
 	}
 	serving := web.Serving{Listen: *webListen, Cert: *webCert}
 	if serving.Listen == "" {
@@ -121,6 +131,20 @@ func installAgent(args []string) error {
 	}
 	fmt.Println()
 	return showWebSignIn(ws, pw)
+}
+
+// remoteListen is the address tally serve --remote listens on for --listen.
+func remoteListen(listen string) string {
+	if listen == "" {
+		return fmt.Sprintf(":%d", pairing.Port)
+	}
+	return listen
+}
+
+// remotePort is the port tally serve --remote last said it listens on, or
+// the default.
+func remotePort(st pairing.State) int {
+	return listenPort(st.Listen, pairing.Port)
 }
 
 // listenPort is addr's port, or def when addr is empty or has none.

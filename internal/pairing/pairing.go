@@ -64,6 +64,7 @@ type Phone struct {
 type State struct {
 	HostID string  `json:"host_id"`
 	Phones []Phone `json:"phones"`
+	Listen string  `json:"listen,omitempty"` // tally serve --remote's --listen, for tally pair and doctor
 }
 
 // File is remote.json's path.
@@ -154,6 +155,22 @@ func (s Store) HostID() (string, error) {
 		err = nil
 	}
 	return id, err
+}
+
+// SetListen records the address tally serve --remote listens on, so tally
+// pair puts its port in the QR code and tally doctor probes it.
+func (s Store) SetListen(addr string) error {
+	err := s.update(func(st *State) error {
+		if st.Listen == addr {
+			return errUnchanged
+		}
+		st.Listen = addr
+		return nil
+	})
+	if err == errUnchanged {
+		return nil
+	}
+	return err
 }
 
 // Issue pairs a new phone under label and returns its token, base64url
