@@ -16,7 +16,7 @@ Running several Claude Code agents means constantly checking which one is waitin
 
 ## Install
 
-You need [Go](https://go.dev/dl/) 1.27 or later and a running herdr.
+You need [Go](https://go.dev/dl/) 1.27 or later and a running herdr. tally runs on macOS and Linux.
 
 ```bash
 go install github.com/sroberts/tally@latest
