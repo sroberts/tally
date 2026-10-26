@@ -172,7 +172,7 @@ log_level    = "info"
 | --- | --- |
 | `tally serve` | Run the daemon (launchd calls this). |
 | `tally status` | Pretty-print `/v1/state`: slot grid, herdr statuses, device link. |
-| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, the LaunchAgent, and the pad (handshake, or port held by the agent). |
+| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, the LaunchAgent, and the pad (handshake, or port held by the agent). It warns when the pad's `hello` names a protocol version other than the one tally sends, with a fix to update the firmware, or tally if the pad is newer. |
 | `tally install-agent`, `tally uninstall-agent` | Install or remove the LaunchAgent. |
 | `tally simulate <scenario>` | Send scripted frames (`all-states`, `blocked-unfocused`, `offline`) straight to the device, no herdr needed. |
 | `tally frame '<json>'` | Send one raw frame to the device. |
