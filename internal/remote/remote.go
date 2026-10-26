@@ -183,16 +183,6 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-// ListenAndServe listens on addr (":47824" for every interface) and serves.
-func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	s.cfg.Log.Info("remote listener", "addr", ln.Addr().String())
-	return s.Serve(ctx, ln)
-}
-
 func (s *Server) closeAll(code websocket.StatusCode, reason string) {
 	s.mu.Lock()
 	all := make([]*session, 0, len(s.sessions))
