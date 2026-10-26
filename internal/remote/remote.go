@@ -30,6 +30,7 @@ import (
 	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/daemon"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/limit"
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/slots"
 )
@@ -471,43 +472,15 @@ func (ss *session) work(ctx context.Context, queue <-chan Action, acks chan<- Ac
 }
 
 // limiter counts failed auths per source IP over FailWindow.
-type limiter struct {
-	now   func() time.Time
-	mu    sync.Mutex
-	fails map[string][]time.Time
-}
+type limiter struct{ fails *limit.Window }
 
 func newLimiter(now func() time.Time) *limiter {
-	return &limiter{now: now, fails: map[string][]time.Time{}}
+	return &limiter{fails: limit.New(FailWindow, now)}
 }
 
-func (l *limiter) recent(ip string) []time.Time {
-	cutoff := l.now().Add(-FailWindow)
-	kept := l.fails[ip][:0]
-	for _, t := range l.fails[ip] {
-		if t.After(cutoff) {
-			kept = append(kept, t)
-		}
-	}
-	if len(kept) == 0 {
-		delete(l.fails, ip)
-		return nil
-	}
-	l.fails[ip] = kept
-	return kept
-}
+func (l *limiter) blocked(ip string) bool { return l.fails.Count(ip) >= MaxFailures }
 
-func (l *limiter) blocked(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.recent(ip)) >= MaxFailures
-}
-
-func (l *limiter) fail(ip string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.fails[ip] = append(l.recent(ip), l.now())
-}
+func (l *limiter) fail(ip string) { l.fails.Add(ip) }
 
 // port returns addr's TCP port.
 func port(addr net.Addr) int {
