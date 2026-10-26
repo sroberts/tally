@@ -93,14 +93,42 @@ func (s Store) Load() (State, error) {
 
 // save writes remote.json with mode 0600, atomically.
 func (s Store) save(st State) error {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
 	return files.WritePrivate(s.File(), append(b, '\n'))
+}
+
+// update reads remote.json, applies f and writes the result, holding a
+// lock so tally pair, tally pair --revoke and tally serve never lose each
+// other's writes. f returning an error leaves the file alone.
+func (s Store) update(f func(*State) error) error {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		return err
+	}
+	return files.Locked(filepath.Join(s.Dir, "remote.lock"), func() error {
+		st, err := s.Load()
+		if err != nil {
+			return err
+		}
+		if err := f(&st); err != nil {
+			return err
+		}
+		return s.save(st)
+	})
+}
+
+// errUnchanged makes update skip the write.
+var errUnchanged = errors.New("unchanged")
+
+// ensureHostID gives st a host id if it has none.
+func ensureHostID(st *State) {
+	if st.HostID == "" {
+		b := make([]byte, 16)
+		rand.Read(b)
+		st.HostID = hex.EncodeToString(b)
+	}
 }
 
 // HostID returns this host's id, making one on first use.
@@ -112,34 +140,41 @@ func (s Store) HostID() (string, error) {
 	if st.HostID != "" {
 		return st.HostID, nil
 	}
-	b := make([]byte, 16)
-	rand.Read(b)
-	st.HostID = hex.EncodeToString(b)
-	return st.HostID, s.save(st)
+	var id string
+	err = s.update(func(st *State) error {
+		had := st.HostID != ""
+		ensureHostID(st)
+		id = st.HostID
+		if had {
+			return errUnchanged // another tally made one first
+		}
+		return nil
+	})
+	if err == errUnchanged {
+		err = nil
+	}
+	return id, err
 }
 
 // Issue pairs a new phone under label and returns its token, base64url
 // without padding. The token is shown once and never stored.
 func (s Store) Issue(label string, now time.Time) (string, error) {
-	if _, err := s.HostID(); err != nil {
-		return "", err
-	}
-	st, err := s.Load()
-	if err != nil {
-		return "", err
-	}
-	if label == "" {
-		label = nextLabel(st.Phones)
-	}
-	for _, p := range st.Phones {
-		if p.Label == label {
-			return "", fmt.Errorf("a phone is already paired as %q; revoke it first or pick another --label", label)
-		}
-	}
 	raw := make([]byte, 32)
 	rand.Read(raw)
-	st.Phones = append(st.Phones, Phone{Label: label, TokenSHA256: hash(raw), Created: now.UTC().Truncate(time.Second)})
-	if err := s.save(st); err != nil {
+	err := s.update(func(st *State) error {
+		ensureHostID(st)
+		if label == "" {
+			label = nextLabel(st.Phones)
+		}
+		for _, p := range st.Phones {
+			if p.Label == label {
+				return fmt.Errorf("a phone is already paired as %q; revoke it first or pick another --label", label)
+			}
+		}
+		st.Phones = append(st.Phones, Phone{Label: label, TokenSHA256: hash(raw), Created: now.UTC().Truncate(time.Second)})
+		return nil
+	})
+	if err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
@@ -160,24 +195,22 @@ func nextLabel(phones []Phone) string {
 // Revoke unpairs the phone with label. A running tally serve drops its
 // session when it next reads remote.json.
 func (s Store) Revoke(label string) error {
-	st, err := s.Load()
-	if err != nil {
-		return err
-	}
-	kept := st.Phones[:0]
-	found := false
-	for _, p := range st.Phones {
-		if p.Label == label {
-			found = true
-			continue
+	return s.update(func(st *State) error {
+		kept := st.Phones[:0]
+		found := false
+		for _, p := range st.Phones {
+			if p.Label == label {
+				found = true
+				continue
+			}
+			kept = append(kept, p)
 		}
-		kept = append(kept, p)
-	}
-	if !found {
-		return fmt.Errorf("no phone is paired as %q", label)
-	}
-	st.Phones = kept
-	return s.save(st)
+		if !found {
+			return fmt.Errorf("no phone is paired as %q", label)
+		}
+		st.Phones = kept
+		return nil
+	})
 }
 
 func hash(raw []byte) string {
