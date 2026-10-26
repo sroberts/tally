@@ -105,7 +105,7 @@ Every event is an invalidation signal. The daemon waits 50 ms for more events, t
 
 **Recovery**
 
-- `events_lost` on either connection: reopen it at once, wait for `subscription_started`, then take a fresh snapshot.
+- `events_lost` on either connection: reopen it at once, wait for `subscription_started`, then take a fresh snapshot. Further losses in a row wait 50 ms, then twice as long each time up to 2 s, so a herdr that keeps overrunning isn't redialled in a tight loop; a subscription that stays up 2 s starts the count again.
 - Any other subscription failure (herdr rejected a gone pane, the connection dropped): invalidate, then retry after 2 s, or sooner for connection B when a new pane set arrives.
 - Socket gone (herdr server stopped): mark every slot empty, show `HERDR OFFLINE` on the OLED, retry every 2 s.
 - A 2 s safety poll takes a snapshot even with no events, which bounds any missed event to 2 s of staleness.
