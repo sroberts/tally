@@ -105,7 +105,7 @@ Every event is an invalidation signal. The daemon waits 50 ms for more events, t
 
 **Recovery**
 
-- `events_lost` on either connection: reopen it at once, wait for `subscription_started`, then take a fresh snapshot.
+- `events_lost` on either connection: reopen it at once, wait for `subscription_started`, then take a fresh snapshot. Further losses in a row wait 50 ms, then twice as long each time up to 2 s, so a herdr that keeps overrunning isn't redialled in a tight loop; a subscription that stays up 2 s starts the count again.
 - Any other subscription failure (herdr rejected a gone pane, the connection dropped): invalidate, then retry after 2 s, or sooner for connection B when a new pane set arrives.
 - Socket gone (herdr server stopped): mark every slot empty, show `HERDR OFFLINE` on the OLED, retry every 2 s.
 - A 2 s safety poll takes a snapshot even with no events, which bounds any missed event to 2 s of staleness.
@@ -172,7 +172,7 @@ log_level    = "info"
 | --- | --- |
 | `tally serve` | Run the daemon (launchd calls this). |
 | `tally status` | Pretty-print `/v1/state`: slot grid, herdr statuses, device link. |
-| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, the LaunchAgent, and the pad (handshake, or port held by the agent). |
+| `tally doctor` | Check herdr socket, Claude integration, `ui.agent_panel_sort`, the LaunchAgent, and the pad (handshake, or port held by the agent). It warns when the pad's `hello` names a protocol version other than the one tally sends, with a fix to update the firmware, or tally if the pad is newer. |
 | `tally install-agent`, `tally uninstall-agent` | Install or remove the LaunchAgent. |
 | `tally simulate <scenario>` | Send scripted frames (`all-states`, `blocked-unfocused`, `offline`) straight to the device, no herdr needed. |
 | `tally frame '<json>'` | Send one raw frame to the device. |
@@ -209,7 +209,7 @@ Newline-delimited JSON over the CircuitPython USB CDC data port, protocol versio
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `v` | int | Protocol version. Firmware shows `UPDATE FW` and ignores frames above its supported version. |
+| `v` | int | Protocol version. Firmware shows `UPDATE FW` and ignores frames above its supported version. It also drops frames with an older or non-integer `v`, so its link goes stale until tally sends the version it speaks. |
 | `seq` | uint32 | Increments per frame; resets on daemon restart. Debug display only. |
 | `slots` | array, length = `slots` config | State code per sidebar slot 1..N (`N`, `G`, `W`, `R`, `U`), `null` when empty. |
 | `focus` | int or null | Focused slot, 1-based. `0` when the focused agent sits beyond the slots; `null` when the focus is not an agent. |

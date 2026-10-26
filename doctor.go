@@ -135,11 +135,14 @@ func checkPad(agent launchd.State) doctor.Result {
 		if err != nil {
 			continue
 		}
-		r.Level, r.Detail = doctor.OK, fmt.Sprintf("%s answered: firmware %s, protocol v%d", path, hello.FW, hello.V)
+		r = doctor.PadProtocol(path, hello.FW, hello.V)
 		if running {
-			r.Level, r.Detail = doctor.Warn, r.Detail+", so the launch agent is not connected to it"
-			_, log := launchd.Paths(os.Getenv("HOME"))
-			r.Fix = "an agent installed seconds ago may still be connecting: run tally doctor again; otherwise read " + log
+			r.Detail += "; the launch agent is not connected to it"
+			if r.Level == doctor.OK {
+				_, log := launchd.Paths(os.Getenv("HOME"))
+				r.Level = doctor.Warn
+				r.Fix = "an agent installed seconds ago may still be connecting: run tally doctor again; otherwise read " + log
+			}
 		}
 		return r
 	}

@@ -52,7 +52,8 @@ type Error struct {
 
 func (e *Error) Error() string { return "herdr: " + e.Code + ": " + e.Message }
 
-// OfflineError means herdr's socket did not accept a connection.
+// OfflineError means herdr's socket did not accept a connection or the
+// request written to it.
 type OfflineError struct {
 	Path string
 	Err  error
@@ -75,7 +76,16 @@ func New(path string) *Client { return &Client{Path: path} }
 
 // Call sends one request and decodes the response's result into out.
 func (c *Client) Call(method string, params any, out any) error {
-	conn, err := c.send(method, params)
+	if !allowed[method] {
+		return fmt.Errorf("herdr: method %q is not on Tally's read-only allowlist", method)
+	}
+	return call(c.Path, method, params, out)
+}
+
+// call dials herdr at path, sends one request and decodes the response's
+// result into out. Callers check their allowlist first.
+func call(path, method string, params any, out any) error {
+	conn, err := dial(path, method, params)
 	if err != nil {
 		return err
 	}
@@ -100,6 +110,9 @@ func (c *Client) send(method string, params any) (net.Conn, error) {
 	return dial(c.Path, method, params)
 }
 
+// dialSocket opens herdr's socket; tests replace it.
+var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("unix", path, Timeout) }
+
 // dial connects to herdr at path and writes one request. Callers check
 // their allowlist first.
 func dial(path, method string, params any) (net.Conn, error) {
@@ -115,14 +128,14 @@ func dial(path, method string, params any) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn, err := net.DialTimeout("unix", path, Timeout)
+	conn, err := dialSocket(path)
 	if err != nil {
 		return nil, &OfflineError{Path: path, Err: err}
 	}
 	conn.SetDeadline(time.Now().Add(Timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
 		conn.Close()
-		return nil, err
+		return nil, &OfflineError{Path: path, Err: err}
 	}
 	return conn, nil
 }

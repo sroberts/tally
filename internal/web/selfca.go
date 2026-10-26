@@ -15,14 +15,12 @@ import (
 	"math/big"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/sroberts/tally/internal/pairing"
+	"github.com/sroberts/tally/internal/files"
 )
 
 // Lifetimes for --web-cert self. Apple refuses server certificates valid
@@ -32,7 +30,6 @@ const (
 	caLife      = 10 * 365 * 24 * time.Hour
 	serverLife  = 397 * 24 * time.Hour
 	serverRenew = 30 * 24 * time.Hour // reissue when this little is left
-	statusWait  = 10 * time.Second    // for tailscale status
 )
 
 // Self serves a certificate from tally's own certificate authority, for
@@ -144,25 +141,6 @@ func (s *Self) refresh(ctx context.Context, now time.Time) error {
 	return nil
 }
 
-// MagicDNSName asks the tailscale CLI at bin for this machine's MagicDNS
-// name.
-func MagicDNSName(ctx context.Context, bin string) (string, error) {
-	if bin == "" {
-		return "", errors.New("the tailscale CLI is not installed")
-	}
-	ctx, cancel := context.WithTimeout(ctx, statusWait)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "status", "--json").Output()
-	if err != nil {
-		return "", fmt.Errorf("tailscale status: %w", err)
-	}
-	name := pairing.TailscaleName(out)
-	if name == "" {
-		return "", errors.New("tailscale is not running or this machine has no MagicDNS name")
-	}
-	return name, nil
-}
-
 // SelfFiles are where --web-cert self keeps the CA and the server
 // certificate for name, each with its key in one file so the pair can't
 // tear. A directory per name means switching tailnets and back finds the
@@ -185,16 +163,15 @@ func EnsureCA(dir, name string, now time.Time) (ca *x509.Certificate, key *ecdsa
 	if err := os.MkdirAll(filepath.Dir(caFile), 0o700); err != nil {
 		return nil, nil, false, err
 	}
-	lock, err := os.OpenFile(filepath.Join(dir, "ca.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return nil, nil, false, err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	err = files.Locked(filepath.Join(dir, "ca.lock"), func() error {
+		ca, key, made, err = ensureCA(caFile, name, now)
+		return err
+	})
+	return ca, key, made, err
+}
 
+// ensureCA is EnsureCA once it holds the lock.
+func ensureCA(caFile, name string, now time.Time) (ca *x509.Certificate, key *ecdsa.PrivateKey, made bool, err error) {
 	ca, key, err = loadPair(caFile)
 	if err == nil && CACovers(ca, name) && now.Before(CAReplaceAt(ca)) {
 		return ca, key, false, nil
@@ -370,13 +347,4 @@ func setAside(path string, now time.Time) error {
 	return os.Rename(path, path+".replaced-"+now.UTC().Format("20060102T150405Z"))
 }
 
-func writePrivate(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil { // WriteFile keeps an old file's mode
-		return err
-	}
-	return os.Rename(tmp, path)
-}
+func writePrivate(path string, b []byte) error { return files.WritePrivate(path, b) }

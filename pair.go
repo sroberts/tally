@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/sroberts/tally/internal/pairing"
+	"github.com/sroberts/tally/internal/web"
 )
 
 func pair(args []string) error {
@@ -57,27 +60,33 @@ func pair(args []string) error {
 	if err != nil {
 		return err
 	}
-	ts := ""
-	if out, err := runCmd("tailscale", "status", "--json"); err == nil {
-		ts = pairing.TailscaleName(out)
+	st, err := store.Load()
+	if err != nil {
+		return err
 	}
+	ts, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
 	p := pairing.Payload{V: pairing.ProtocolVersion, HostID: hostID, HostName: host, CertSHA256: fp, Token: token,
-		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), pairing.Port)}
+		Endpoints: pairing.Endpoints(hostID, ts, pairing.LANAddrs(), remotePort(st))}
 
-	pairing.RenderQR(os.Stdout, p)
-	fmt.Printf("scan this on your phone to pair it. it is shown once.\n")
-	fmt.Printf("  host %s, cert %s…\n", host, fp[:16])
+	printPairing(os.Stdout, p, *asJSON)
+	return nil
+}
+
+// printPairing shows a pairing's QR code and where the phone will look.
+func printPairing(w io.Writer, p pairing.Payload, asJSON bool) {
+	pairing.RenderQR(w, p)
+	fmt.Fprintf(w, "scan this on your phone to pair it. it is shown once.\n")
+	fmt.Fprintf(w, "  host %s, cert %s…\n", p.HostName, p.CertSHA256[:16])
 	for _, e := range p.Endpoints {
 		switch e.Kind {
 		case "bonjour":
-			fmt.Printf("  %-9s %s.%s.local\n", e.Kind, e.Name, "_tally._tcp")
+			fmt.Fprintf(w, "  %-9s %s.%s.local\n", e.Kind, e.Name, "_tally._tcp")
 		default:
-			fmt.Printf("  %-9s %s:%d\n", e.Kind, e.Host, e.Port)
+			fmt.Fprintf(w, "  %-9s %s:%d\n", e.Kind, e.Host, e.Port)
 		}
 	}
-	if *asJSON {
-		fmt.Printf("\n%s\n", p.JSON())
+	if asJSON {
+		fmt.Fprintf(w, "\n%s\n", p.JSON())
 	}
-	fmt.Println("then run tally serve --remote (or tally install-agent --remote)")
-	return nil
+	fmt.Fprintln(w, "then run tally serve --remote (or tally install-agent --remote)")
 }

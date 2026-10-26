@@ -12,10 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/crypto/argon2"
+
+	"github.com/sroberts/tally/internal/files"
 )
 
 // argon2id parameters: RFC 9106's second recommended option.
@@ -107,14 +108,7 @@ func (s Store) save(st State) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.File() + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp, 0o600); err != nil { // WriteFile keeps an old file's mode
-		return err
-	}
-	return os.Rename(tmp, s.File())
+	return files.WritePrivate(s.File(), append(b, '\n'))
 }
 
 // update reads web.json, applies f and writes the result, holding a lock
@@ -124,23 +118,16 @@ func (s Store) update(f func(*State) error) error {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err
 	}
-	lock, err := os.OpenFile(filepath.Join(s.Dir, "web.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	st, err := s.Load()
-	if err != nil {
-		return err
-	}
-	if err := f(&st); err != nil {
-		return err
-	}
-	return s.save(st)
+	return files.Locked(filepath.Join(s.Dir, "web.lock"), func() error {
+		st, err := s.Load()
+		if err != nil {
+			return err
+		}
+		if err := f(&st); err != nil {
+			return err
+		}
+		return s.save(st)
+	})
 }
 
 // errUnchanged makes update skip the write.

@@ -15,6 +15,7 @@ import (
 	"github.com/sroberts/tally/internal/herdr"
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/remote"
+	"github.com/sroberts/tally/internal/web"
 )
 
 // checkRemote checks the remote listener's side: the listener, paired phones,
@@ -25,15 +26,16 @@ func checkRemote() []doctor.Result {
 		return []doctor.Result{{Name: "remote", Level: doctor.Warn, Detail: err.Error()}}
 	}
 	addrs := pairing.LANAddrs()
+	st, err := store.Load()
+	port := remotePort(st)
 	_, fp, certErr := store.LoadCertificate()
 	var probeErr error
 	if certErr == nil {
-		probeErr = probe(net.JoinHostPort("127.0.0.1", strconv.Itoa(pairing.Port)), fp)
+		probeErr = probe(probeAddr(st.Listen, port), fp)
 	}
 	listening := certErr == nil && probeErr == nil
-	results := []doctor.Result{doctor.Listener(certErr, probeErr, pairing.Port, addrs)}
+	results := []doctor.Result{doctor.Listener(certErr, probeErr, port, addrs)}
 
-	st, err := store.Load()
 	if err != nil {
 		results = append(results, doctor.Result{Name: "phones", Level: doctor.Fail, Detail: err.Error()})
 	} else {
@@ -50,9 +52,9 @@ func checkRemote() []doctor.Result {
 		results = append(results, doctor.Result{Name: "bonjour", Level: doctor.Info, Detail: "not checked: the listener is not running"})
 	}
 
-	out, err := runCmd("tailscale", "status", "--json")
+	out, err := web.TailscaleStatus(context.Background(), web.FindTailscale())
 	results = append(results, doctor.Tailscale(out, err))
-	results = append(results, checkFirewall(listening, fp, addrs))
+	results = append(results, checkFirewall(listening, fp, addrs, port))
 	return append(results, checkWritePath())
 }
 
@@ -91,12 +93,12 @@ func checkBonjour(instance string) doctor.Result {
 
 // checkFirewall reads the OS firewall and, when the listener runs, tries
 // the port on the first LAN address as a phone on the same Wi-Fi would.
-func checkFirewall(listening bool, fp string, addrs []string) doctor.Result {
+func checkFirewall(listening bool, fp string, addrs []string, port int) doctor.Result {
 	var r doctor.Result
 	if runtime.GOOS == "linux" {
 		ufw, _ := runCmd("ufw", "status")
 		fwd, _ := runCmd("firewall-cmd", "--state")
-		r = doctor.LinuxFirewall(string(ufw), string(fwd), pairing.Port)
+		r = doctor.LinuxFirewall(string(ufw), string(fwd), port)
 	} else {
 		const fw = "/usr/libexec/ApplicationFirewall/socketfilterfw"
 		program, _ := executable()
@@ -105,7 +107,7 @@ func checkFirewall(listening bool, fp string, addrs []string) doctor.Result {
 		r = doctor.MacFirewall(string(global), string(app), program)
 	}
 	if listening && len(addrs) > 0 {
-		addr := net.JoinHostPort(addrs[0], strconv.Itoa(pairing.Port))
+		addr := net.JoinHostPort(addrs[0], strconv.Itoa(port))
 		if err := probe(addr, fp); err != nil {
 			r.Level = max(r.Level, doctor.Warn)
 			r.Detail += "; " + addr + " is not reachable: " + err.Error()

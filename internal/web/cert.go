@@ -47,6 +47,7 @@ type Tailscale struct {
 const (
 	certRefresh = 24 * time.Hour
 	certRetry   = time.Minute
+	statusWait  = 10 * time.Second // for tailscale status
 )
 
 func (t *Tailscale) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -96,16 +97,9 @@ func (t *Tailscale) Refresh(ctx context.Context) error {
 }
 
 func (t *Tailscale) refresh(ctx context.Context) error {
-	if t.Bin == "" {
-		return errors.New("the tailscale CLI is not installed")
-	}
-	out, err := exec.CommandContext(ctx, t.Bin, "status", "--json").Output()
+	name, err := MagicDNSName(ctx, t.Bin)
 	if err != nil {
-		return fmt.Errorf("tailscale status: %w", err)
-	}
-	name := pairing.TailscaleName(out)
-	if name == "" {
-		return errors.New("tailscale is not running or this machine has no MagicDNS name")
+		return err
 	}
 	if err := os.MkdirAll(t.Dir, 0o700); err != nil {
 		return err
@@ -147,6 +141,35 @@ func firstLine(out []byte, err error) string {
 		return err.Error()
 	}
 	return s
+}
+
+// TailscaleStatus runs tailscale status --json with the CLI at bin. It
+// gives up after statusWait, so a wedged tailscaled can't hang tally.
+func TailscaleStatus(ctx context.Context, bin string) ([]byte, error) {
+	if bin == "" {
+		return nil, errors.New("the tailscale CLI is not installed")
+	}
+	ctx, cancel := context.WithTimeout(ctx, statusWait)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "status", "--json").Output()
+	if err != nil {
+		return out, fmt.Errorf("tailscale status: %w", err)
+	}
+	return out, nil
+}
+
+// MagicDNSName asks the tailscale CLI at bin for this machine's MagicDNS
+// name.
+func MagicDNSName(ctx context.Context, bin string) (string, error) {
+	out, err := TailscaleStatus(ctx, bin)
+	if err != nil {
+		return "", err
+	}
+	name := pairing.TailscaleName(out)
+	if name == "" {
+		return "", errors.New("tailscale is not running or this machine has no MagicDNS name")
+	}
+	return name, nil
 }
 
 // FindTailscale returns the tailscale CLI's path, or "". A LaunchAgent or

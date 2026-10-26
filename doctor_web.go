@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -40,12 +41,7 @@ func checkWeb() []doctor.Result {
 	} else {
 		results = append(results, doctor.WebPassword(st.Password != "", len(st.Browsers)))
 	}
-	name := ""
-	if bin := web.FindTailscale(); bin != "" {
-		if out, err := runCmd(bin, "status", "--json"); err == nil {
-			name = pairing.TailscaleName(out)
-		}
-	}
+	name, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
 	if serving.Cert == "self" {
 		var server, caReplace time.Time
 		var err error

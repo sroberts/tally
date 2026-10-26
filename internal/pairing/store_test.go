@@ -1,0 +1,116 @@
+package pairing
+
+import (
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+)
+
+// Pairing and revoking at the same time, as tally pair in two terminals
+// would, keeps every write: remote.json is updated under a lock.
+func TestConcurrentIssueAndRevokeLoseNothing(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	for i := range 10 {
+		if _, err := s.Issue(fmt.Sprintf("old-%d", i), time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Go(func() {
+			if _, err := s.Issue(fmt.Sprintf("new-%d", i), time.Now()); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Go(func() {
+			if err := s.Revoke(fmt.Sprintf("old-%d", i)); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	st, err := s.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Phones) != 10 {
+		t.Fatalf("%d phones paired, want the 10 new ones: %+v", len(st.Phones), st.Phones)
+	}
+	for _, p := range st.Phones {
+		if p.Label[:4] != "new-" {
+			t.Errorf("%s survived its revoke", p.Label)
+		}
+	}
+}
+
+// Two first uses at once agree on one host id.
+func TestConcurrentHostIDAgree(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	ids := make([]string, 8)
+	var wg sync.WaitGroup
+	for i := range ids {
+		wg.Go(func() {
+			id, err := s.HostID()
+			if err != nil {
+				t.Error(err)
+			}
+			ids[i] = id
+		})
+	}
+	wg.Wait()
+	for _, id := range ids {
+		if id == "" || id != ids[0] {
+			t.Fatalf("host ids %q", ids)
+		}
+	}
+	if st, _ := s.Load(); st.HostID != ids[0] {
+		t.Errorf("remote.json has %q, callers got %q", st.HostID, ids[0])
+	}
+}
+
+// SetListen records tally serve's --listen for tally pair, and pairing and
+// revoking keep it.
+func TestSetListen(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	if _, err := s.SetListen("100.64.0.1:48000"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Issue("phone", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if prev, err := s.SetListen("100.64.0.1:48000"); err != nil || prev != "100.64.0.1:48000" { // unchanged
+		t.Fatal(prev, err)
+	}
+	if err := s.Revoke("phone"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Load()
+	if err != nil || st.Listen != "100.64.0.1:48000" || st.HostID == "" {
+		t.Errorf("state %+v, %v", st, err)
+	}
+}
+
+// A tally serve run by hand puts back the agent's address when it stops,
+// unless another tally has recorded its own since.
+func TestRestoreListen(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	s.SetListen(":47824") // the agent
+	prev, err := s.SetListen("127.0.0.1:47999")
+	if err != nil || prev != ":47824" {
+		t.Fatalf("prev %q, %v", prev, err)
+	}
+	if err := s.RestoreListen("127.0.0.1:47999", prev); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Load(); st.Listen != ":47824" {
+		t.Errorf("after restoring: %q", st.Listen)
+	}
+
+	prev, _ = s.SetListen("127.0.0.1:47999")
+	s.SetListen(":48000") // the agent restarted with a new --listen meanwhile
+	s.RestoreListen("127.0.0.1:47999", prev)
+	if st, _ := s.Load(); st.Listen != ":48000" {
+		t.Errorf("restored over a newer address: %q", st.Listen)
+	}
+}

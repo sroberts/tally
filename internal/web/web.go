@@ -35,6 +35,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/sroberts/tally/internal/limit"
 	"github.com/sroberts/tally/internal/remote"
 )
 
@@ -138,12 +139,21 @@ func headers(next http.Handler) http.Handler {
 	})
 }
 
+// Timeouts for one request and its response. Every page is small, and
+// net/http clears a connection's deadlines when /ws hijacks it, so they
+// never cut a pad's WebSocket short. Variables so tests can shorten them.
+var (
+	readTimeout  = 10 * time.Second
+	writeTimeout = 30 * time.Second
+)
+
 // Serve accepts browsers on ln, a plain TCP listener, until ctx is done.
-// It wraps ln in TLS itself.
+// It wraps ln in TLS 1.3 itself.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	tc := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.cfg.Certs.GetCertificate}
+	tc := &tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: s.cfg.Certs.GetCertificate}
 	srv := &http.Server{Handler: s.Handler(), TLSConfig: tc,
-		ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 2 * time.Minute,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: readTimeout, WriteTimeout: writeTimeout,
+		IdleTimeout: 2 * time.Minute,
 		ErrorLog:    slog.NewLogLogger(s.cfg.Log.Handler(), slog.LevelDebug),
 		BaseContext: func(net.Listener) context.Context { return ctx }}
 	go s.watchRevocations(ctx)
@@ -515,62 +525,24 @@ func Label(ua string) string {
 // limiter counts failed sign-ins per source address, and in total, over
 // FailWindow.
 type limiter struct {
-	now   func() time.Time
-	mu    sync.Mutex
-	fails map[string][]time.Time
-	all   []time.Time
+	fails *limit.Window // per address
+	all   *limit.Window // everyone's, under one key
 }
 
 func newLimiter(now func() time.Time) *limiter {
-	return &limiter{now: now, fails: map[string][]time.Time{}}
-}
-
-func (l *limiter) prune(ts []time.Time) []time.Time {
-	cutoff := l.now().Add(-FailWindow)
-	kept := ts[:0]
-	for _, t := range ts {
-		if t.After(cutoff) {
-			kept = append(kept, t)
-		}
-	}
-	return kept
+	return &limiter{fails: limit.New(FailWindow, now), all: limit.New(FailWindow, now)}
 }
 
 // blocked reports whether ip, or everyone, has used up its failures.
 func (l *limiter) blocked(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.all = l.prune(l.all)
-	return l.mine(ip) >= MaxFailures || len(l.all) >= MaxAllFailures
+	return l.blockedHere(ip) || l.all.Count("") >= MaxAllFailures
 }
 
 // blockedHere reports whether ip has used up its own failures, ignoring
 // everyone else's.
-func (l *limiter) blockedHere(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.mine(ip) >= MaxFailures
-}
-
-func (l *limiter) mine(ip string) int {
-	mine := l.prune(l.fails[ip])
-	if len(mine) == 0 {
-		delete(l.fails, ip)
-	} else {
-		l.fails[ip] = mine
-	}
-	return len(mine)
-}
+func (l *limiter) blockedHere(ip string) bool { return l.fails.Count(ip) >= MaxFailures }
 
 func (l *limiter) fail(ip string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for other := range l.fails { // drop addresses whose failures have aged out
-		if other != ip {
-			l.mine(other)
-		}
-	}
-	now := l.now()
-	l.fails[ip] = append(l.prune(l.fails[ip]), now)
-	l.all = append(l.prune(l.all), now)
+	l.fails.Add(ip)
+	l.all.Add("")
 }

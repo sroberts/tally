@@ -128,6 +128,18 @@ func serve(args []string) error {
 			return fmt.Errorf("remote listener: %w", err)
 		}
 		log.Info("remote listener", "addr", ln.Addr().String())
+		// So tally pair and tally doctor know which port to use. On the way
+		// out, put back what was there: a run by hand mustn't leave its
+		// --listen behind for the background agent's pairings.
+		if prev, err := srv.Store().SetListen(*listen); err != nil {
+			log.Warn("remote.json", "err", err)
+		} else {
+			defer func() {
+				if err := srv.Store().RestoreListen(*listen, prev); err != nil {
+					log.Warn("remote.json", "err", err)
+				}
+			}()
+		}
 		wg.Go(func() {
 			if err := srv.Serve(ctx, ln); err != nil {
 				log.Error("remote listener stopped", "err", err)
@@ -169,6 +181,13 @@ func newWeb(ctx context.Context, wg *sync.WaitGroup, srv *remote.Server, certMod
 	return web.New(web.Config{Store: ws, Remote: srv, Certs: certs, Log: log}), nil
 }
 
+// everyInterface reports whether listen binds every interface, so the
+// local network can reach it and Bonjour is worth advertising.
+func everyInterface(listen string) bool {
+	h, _, _ := net.SplitHostPort(listen)
+	return h == "" || h == "0.0.0.0" || h == "::"
+}
+
 // newRemote builds the remote listener's server. It is the only place a herdr
 // Writer exists while tally serves.
 func newRemote(path string, reader *herdr.Client, n int, listen string, log *slog.Logger) (*remote.Server, error) {
@@ -193,11 +212,10 @@ func newRemote(path string, reader *herdr.Client, n int, listen string, log *slo
 		log.Info("no phones paired yet; run tally pair")
 	}
 	log.Info("remote identity", "host", host, "host_id", hostID, "cert_sha256", fp)
-	h, _, _ := net.SplitHostPort(listen)
 	return remote.New(remote.Config{
 		Store: store, Slots: n, HostName: host, HostID: hostID, Version: tallyVersion(),
 		Writer: herdr.NewWriter(path), Snapshot: reader.Snapshot,
-		Bonjour: h == "" || h == "0.0.0.0" || h == "::",
+		Bonjour: everyInterface(listen),
 		Log:     log,
 	}, cert), nil
 }

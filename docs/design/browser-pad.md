@@ -4,7 +4,7 @@ A pad for the phone's home screen, served as a web page by `tally serve --web`. 
 
 ## Shape
 
-- `internal/web` serves HTTPS on `:47825` (`--web-listen`). The page is `internal/web/static/`, embedded in the binary: `index.html`, `pad.css`, `pad.js` and `lighting.js`, with no build step and no third-party code.
+- `internal/web` serves HTTPS on `:47825` (`--web-listen`), TLS 1.3 only like the phones' listener. A request gets 10 s to arrive and 30 s for its response; the `/ws` WebSocket is exempt, since upgrading clears the connection's deadlines. The page is `internal/web/static/`, embedded in the binary: `index.html`, `pad.css`, `pad.js` and `lighting.js`, with no build step and no third-party code.
 - The page opens `wss://<host>/ws` and speaks protocol v3 (`docs/protocol-v3.md`) minus the `auth` message: the sign-in cookie is the auth, checked before the upgrade. tally answers `hello` then `state`, as for any v3 client.
 - `/ws` hands the socket to `remote.Server.Attach`, so a browser session is an ordinary v3 session: the same action table, the same herdr write allowlist, one action at a time, acks, a state frame on change and every 5 s. `--web` works without `--remote`; the remote server is built either way and only listens with `--remote`.
 

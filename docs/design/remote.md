@@ -27,7 +27,7 @@ At pairing, tally records every endpoint it can be reached on. On connect, a cli
 ### Pairing
 
 1. `tally pair` generates a self-signed ECDSA P-256 certificate (once) and a fresh 256-bit token.
-2. It prints a QR code in the terminal containing `{v, host_id, host_name, cert_sha256, token, endpoints[]}`.
+2. It prints a QR code in the terminal containing `{v, host_id, host_name, cert_sha256, token, endpoints[]}`. The endpoints use the port `tally serve --remote` (or `tally install-agent --remote`) last recorded in `remote.json` from `--listen`, and 47824 before either has run; `tally doctor` probes the same port. A `tally serve` that stops cleanly puts back the address it replaced, so one run by hand doesn't leave its port behind for the background agent.
 3. The client scans it and keeps the record in the device's secure storage.
 4. tally stores only `sha256(token)`, a label and a created timestamp in `~/.config/tally/remote.json` (mode 0600).
 5. `tally pair --list` shows paired phones. `tally pair --revoke <label>` removes one and drops its live connection.

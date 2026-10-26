@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/sroberts/tally/internal/files"
 )
 
 // Port is the remote listener's TLS WebSocket port.
@@ -62,6 +64,7 @@ type Phone struct {
 type State struct {
 	HostID string  `json:"host_id"`
 	Phones []Phone `json:"phones"`
+	Listen string  `json:"listen,omitempty"` // tally serve --remote's --listen, for tally pair and doctor
 }
 
 // File is remote.json's path.
@@ -91,25 +94,42 @@ func (s Store) Load() (State, error) {
 
 // save writes remote.json with mode 0600, atomically.
 func (s Store) save(st State) error {
-	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeFile(s.File(), append(b, '\n'))
+	return files.WritePrivate(s.File(), append(b, '\n'))
 }
 
-func writeFile(path string, b []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+// update reads remote.json, applies f and writes the result, holding a
+// lock so tally pair, tally pair --revoke and tally serve never lose each
+// other's writes. f returning an error leaves the file alone.
+func (s Store) update(f func(*State) error) error {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err
 	}
-	if err := os.Chmod(tmp, 0o600); err != nil { // WriteFile keeps an old file's mode
-		return err
+	return files.Locked(filepath.Join(s.Dir, "remote.lock"), func() error {
+		st, err := s.Load()
+		if err != nil {
+			return err
+		}
+		if err := f(&st); err != nil {
+			return err
+		}
+		return s.save(st)
+	})
+}
+
+// errUnchanged makes update skip the write.
+var errUnchanged = errors.New("unchanged")
+
+// ensureHostID gives st a host id if it has none.
+func ensureHostID(st *State) {
+	if st.HostID == "" {
+		b := make([]byte, 16)
+		rand.Read(b)
+		st.HostID = hex.EncodeToString(b)
 	}
-	return os.Rename(tmp, path)
 }
 
 // HostID returns this host's id, making one on first use.
@@ -121,34 +141,76 @@ func (s Store) HostID() (string, error) {
 	if st.HostID != "" {
 		return st.HostID, nil
 	}
-	b := make([]byte, 16)
-	rand.Read(b)
-	st.HostID = hex.EncodeToString(b)
-	return st.HostID, s.save(st)
+	var id string
+	err = s.update(func(st *State) error {
+		had := st.HostID != ""
+		ensureHostID(st)
+		id = st.HostID
+		if had {
+			return errUnchanged // another tally made one first
+		}
+		return nil
+	})
+	if err == errUnchanged {
+		err = nil
+	}
+	return id, err
+}
+
+// SetListen records the address tally serve --remote listens on, so tally
+// pair puts its port in the QR code and tally doctor probes it. It returns
+// the address recorded before, for RestoreListen.
+func (s Store) SetListen(addr string) (prev string, err error) {
+	return prev, s.swapListen(func(cur string) (string, bool) {
+		prev = cur
+		return addr, true
+	})
+}
+
+// RestoreListen puts back prev, the address SetListen replaced with addr,
+// unless something has recorded another address since. A tally serve run
+// by hand calls it on the way out, so it doesn't leave its --listen behind
+// for the background agent's pairings.
+func (s Store) RestoreListen(addr, prev string) error {
+	return s.swapListen(func(cur string) (string, bool) { return prev, cur == addr })
+}
+
+// swapListen replaces the recorded address with what f returns for the
+// current one, when f says to.
+func (s Store) swapListen(f func(cur string) (next string, ok bool)) error {
+	err := s.update(func(st *State) error {
+		next, ok := f(st.Listen)
+		if !ok || next == st.Listen {
+			return errUnchanged
+		}
+		st.Listen = next
+		return nil
+	})
+	if err == errUnchanged {
+		return nil
+	}
+	return err
 }
 
 // Issue pairs a new phone under label and returns its token, base64url
 // without padding. The token is shown once and never stored.
 func (s Store) Issue(label string, now time.Time) (string, error) {
-	if _, err := s.HostID(); err != nil {
-		return "", err
-	}
-	st, err := s.Load()
-	if err != nil {
-		return "", err
-	}
-	if label == "" {
-		label = nextLabel(st.Phones)
-	}
-	for _, p := range st.Phones {
-		if p.Label == label {
-			return "", fmt.Errorf("a phone is already paired as %q; revoke it first or pick another --label", label)
-		}
-	}
 	raw := make([]byte, 32)
 	rand.Read(raw)
-	st.Phones = append(st.Phones, Phone{Label: label, TokenSHA256: hash(raw), Created: now.UTC().Truncate(time.Second)})
-	if err := s.save(st); err != nil {
+	err := s.update(func(st *State) error {
+		ensureHostID(st)
+		if label == "" {
+			label = nextLabel(st.Phones)
+		}
+		for _, p := range st.Phones {
+			if p.Label == label {
+				return fmt.Errorf("a phone is already paired as %q; revoke it first or pick another --label", label)
+			}
+		}
+		st.Phones = append(st.Phones, Phone{Label: label, TokenSHA256: hash(raw), Created: now.UTC().Truncate(time.Second)})
+		return nil
+	})
+	if err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
@@ -169,24 +231,22 @@ func nextLabel(phones []Phone) string {
 // Revoke unpairs the phone with label. A running tally serve drops its
 // session when it next reads remote.json.
 func (s Store) Revoke(label string) error {
-	st, err := s.Load()
-	if err != nil {
-		return err
-	}
-	kept := st.Phones[:0]
-	found := false
-	for _, p := range st.Phones {
-		if p.Label == label {
-			found = true
-			continue
+	return s.update(func(st *State) error {
+		kept := st.Phones[:0]
+		found := false
+		for _, p := range st.Phones {
+			if p.Label == label {
+				found = true
+				continue
+			}
+			kept = append(kept, p)
 		}
-		kept = append(kept, p)
-	}
-	if !found {
-		return fmt.Errorf("no phone is paired as %q", label)
-	}
-	st.Phones = kept
-	return s.save(st)
+		if !found {
+			return fmt.Errorf("no phone is paired as %q", label)
+		}
+		st.Phones = kept
+		return nil
+	})
 }
 
 func hash(raw []byte) string {
@@ -291,8 +351,8 @@ func (s Store) makeCertificate(hostName string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeFile(s.KeyFile(), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})); err != nil {
+	if err := files.WritePrivate(s.KeyFile(), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})); err != nil {
 		return err
 	}
-	return writeFile(s.CertFile(), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	return files.WritePrivate(s.CertFile(), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }

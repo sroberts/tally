@@ -177,7 +177,9 @@ func (d *Daemon) actor(ctx context.Context) {
 // reconciles from a fresh snapshot.
 func (d *Daemon) lifecycle(ctx context.Context) {
 	var lastErr string
+	lost := lostBackoff{cfg: d.cfg}
 	for {
+		began := time.Now()
 		err := d.herdr.Subscribe(ctx, herdr.Lifecycle, d.poke)
 		if ctx.Err() != nil {
 			return
@@ -187,13 +189,33 @@ func (d *Daemon) lifecycle(ctx context.Context) {
 		}
 		lastErr = err.Error()
 		d.poke()
-		if errors.Is(err, herdr.ErrEventsLost) {
-			continue // resubscribe at once: state is stale until we do
-		}
-		if !sleep(ctx, d.cfg.Retry) {
+		if !sleep(ctx, lost.after(err, time.Since(began))) {
 			return
 		}
 	}
+}
+
+// lostBackoff picks the wait before resubscribing. After events_lost the
+// first resubscribe is at once, since state is stale until it happens, and
+// each further loss in a row waits twice as long, from Debounce up to
+// Retry, so a herdr that keeps overrunning isn't hammered. A subscription
+// that lasted Retry starts the count again. Any other failure waits Retry.
+type lostBackoff struct {
+	cfg  Config
+	next time.Duration
+}
+
+func (b *lostBackoff) after(err error, lasted time.Duration) time.Duration {
+	if !errors.Is(err, herdr.ErrEventsLost) {
+		b.next = 0
+		return b.cfg.Retry
+	}
+	if lasted >= b.cfg.Retry {
+		b.next = 0
+	}
+	wait := b.next
+	b.next = min(max(2*b.next, b.cfg.Debounce, time.Millisecond), b.cfg.Retry)
+	return wait
 }
 
 // agentStatus holds a pane.agent_status_changed subscription for the latest
@@ -203,6 +225,7 @@ func (d *Daemon) lifecycle(ctx context.Context) {
 func (d *Daemon) agentStatus(ctx context.Context) {
 	var panes []string
 	var lastErr string
+	lost := lostBackoff{cfg: d.cfg}
 	for {
 		if len(panes) == 0 {
 			select {
@@ -214,6 +237,7 @@ func (d *Daemon) agentStatus(ctx context.Context) {
 		}
 
 		sctx, cancel := context.WithCancel(ctx)
+		began := time.Now()
 		ended := make(chan error, 1)
 		go func(panes []string) { ended <- d.herdr.Subscribe(sctx, herdr.AgentStatus(panes), d.poke) }(panes)
 		select {
@@ -232,10 +256,11 @@ func (d *Daemon) agentStatus(ctx context.Context) {
 			}
 			lastErr = err.Error()
 			d.poke()
-			if errors.Is(err, herdr.ErrEventsLost) {
+			wait := lost.after(err, time.Since(began))
+			if wait == 0 {
 				continue
 			}
-			t := time.NewTimer(d.cfg.Retry)
+			t := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
 				t.Stop()

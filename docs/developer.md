@@ -4,7 +4,7 @@ How tally is built and tested, and how changes land. The [README](../README.md) 
 
 ## Setup
 
-- Go 1.27 or later. Node is optional: with it, `go test` also runs the browser pad's lighting tests.
+- Go 1.27 or later, on macOS or Linux: tally locks its state files with flock(2), so it doesn't build for Windows. Node is optional: with it, `go test` also runs the browser pad's lighting tests.
 - Python tooling (vibe-macropad's tests) uses [uv](https://docs.astral.sh/uv/) for environments.
 - Install the local hooks that keep `main` clean (they live in `.git/hooks`, so each clone needs them):
 

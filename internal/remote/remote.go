@@ -30,6 +30,7 @@ import (
 	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/daemon"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/limit"
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/slots"
 )
@@ -123,6 +124,9 @@ func (s *Server) Publish(u daemon.Update) {
 	}
 }
 
+// Store is where the server reads paired phones.
+func (s *Server) Store() pairing.Store { return s.cfg.Store }
+
 func (s *Server) tracked() slots.Tracked {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,16 +181,6 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	case err := <-done:
 		return err
 	}
-}
-
-// ListenAndServe listens on addr (":47824" for every interface) and serves.
-func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	s.cfg.Log.Info("remote listener", "addr", ln.Addr().String())
-	return s.Serve(ctx, ln)
 }
 
 func (s *Server) closeAll(code websocket.StatusCode, reason string) {
@@ -423,8 +417,13 @@ func (ss *session) read(ctx context.Context, queue chan<- Action, acks chan<- Ac
 		select {
 		case queue <- msg.Action:
 		default:
-			// The phone drops anything older than 500 ms anyway.
-			acks <- Ack{T: "ack", ID: msg.ID, Err: actions.HerdrError, Msg: "busy"}
+			// The phone drops anything older than 500 ms anyway. Once the
+			// session ends nobody reads acks, so don't wait for it.
+			select {
+			case acks <- Ack{T: "ack", ID: msg.ID, Err: actions.HerdrError, Msg: "busy"}:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 }
@@ -447,7 +446,11 @@ func (ss *session) work(ctx context.Context, queue <-chan Action, acks chan<- Ac
 				ack.Msg = ae.Message
 			}
 		} else if err != nil {
-			ack.Err, ack.Msg = actions.HerdrError, err.Error()
+			ack.Err, ack.Msg = actions.HerdrError, actions.CallFailed
+		}
+		if err != nil && (ae == nil || ae.Err != nil) {
+			// The detail stays here: the client gets fixed text.
+			ss.s.cfg.Log.Info("action failed", "phone", ss.label, "name", a.Name, "err", err)
 		}
 		ss.s.cfg.Log.Debug("action", "phone", ss.label, "name", a.Name, "target", a.Target, "slot", a.Slot, "ok", ack.OK, "err", ack.Err)
 		select {
@@ -459,43 +462,15 @@ func (ss *session) work(ctx context.Context, queue <-chan Action, acks chan<- Ac
 }
 
 // limiter counts failed auths per source IP over FailWindow.
-type limiter struct {
-	now   func() time.Time
-	mu    sync.Mutex
-	fails map[string][]time.Time
-}
+type limiter struct{ fails *limit.Window }
 
 func newLimiter(now func() time.Time) *limiter {
-	return &limiter{now: now, fails: map[string][]time.Time{}}
+	return &limiter{fails: limit.New(FailWindow, now)}
 }
 
-func (l *limiter) recent(ip string) []time.Time {
-	cutoff := l.now().Add(-FailWindow)
-	kept := l.fails[ip][:0]
-	for _, t := range l.fails[ip] {
-		if t.After(cutoff) {
-			kept = append(kept, t)
-		}
-	}
-	if len(kept) == 0 {
-		delete(l.fails, ip)
-		return nil
-	}
-	l.fails[ip] = kept
-	return kept
-}
+func (l *limiter) blocked(ip string) bool { return l.fails.Count(ip) >= MaxFailures }
 
-func (l *limiter) blocked(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.recent(ip)) >= MaxFailures
-}
-
-func (l *limiter) fail(ip string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.fails[ip] = append(l.recent(ip), l.now())
-}
+func (l *limiter) fail(ip string) { l.fails.Add(ip) }
 
 // port returns addr's TCP port.
 func port(addr net.Addr) int {
