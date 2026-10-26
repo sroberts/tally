@@ -100,7 +100,7 @@ func showWebSignIn(ws web.Store, pw string) error {
 		fmt.Println("tailscale is not running here, so the browser pad has no trusted address.")
 		fmt.Println("start tailscale, then run tally web again.")
 		if pw != "" {
-			fmt.Printf("password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
+			fmt.Print(generatedPassword(pw))
 		}
 		return nil
 	}
@@ -120,7 +120,7 @@ func showWebSignIn(ws web.Store, pw string) error {
 	fmt.Printf("  link      %s\n", link)
 	fmt.Printf("  open      %s\n", base)
 	if pw != "" {
-		fmt.Printf("  password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
+		fmt.Print("  " + generatedPassword(pw))
 	} else {
 		fmt.Printf("  password  set; %d browser(s) signed in (tally web --list)\n", len(st.Browsers))
 	}
@@ -129,6 +129,11 @@ func showWebSignIn(ws web.Store, pw string) error {
 	}
 	fmt.Println("  run tally web again for a fresh code")
 	return nil
+}
+
+// generatedPassword is the line that shows a password tally just made.
+func generatedPassword(pw string) string {
+	return fmt.Sprintf("password  %s  (generated; shown once. tally web --set-password picks your own)\n", pw)
 }
 
 // writeCA writes the CA for --web-cert self to tally-ca.cer in the current
