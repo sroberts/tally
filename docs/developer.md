@@ -46,7 +46,7 @@ go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 ```
 
-Workflow actions are pinned to commit SHAs with the version in a comment. Dependabot (`.github/dependabot.yml`) proposes Go module and action updates weekly; review them like any other PR. `go.mod`'s `toolchain` line sets the Go release CI and releases build with, while the `go` line stays the oldest Go that can install tally.
+Workflow actions are pinned to commit SHAs with the version in a comment. Dependabot (`.github/dependabot.yml`) proposes Go module and action updates weekly; review them like any other PR. It doesn't see the tool versions written into the workflows (GoReleaser in `release.yml`, staticcheck and govulncheck in `ci.yml`), so bump those by hand. `go.mod`'s `go` line is the Go every build uses, CI's, releases' and `go install`'s alike: older Go fetches it automatically. Raise it when a Go security release fixes something tally calls.
 
 ### The website
 
@@ -55,7 +55,7 @@ Workflow actions are pinned to commit SHAs with the version in a comment. Depend
 ### Releasing
 
 1. On an up-to-date `main` with green CI, tag the release: `git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0`. Pushing a tag is the one push to the remote that isn't a branch.
-2. The release workflow (`.github/workflows/release.yml`) runs `go vet` and `go test -short`, then GoReleaser on macOS: macOS builds need cgo for serial port discovery, Linux builds are pure Go. It publishes archives for macOS and Linux (arm64 and amd64), an SPDX SBOM per archive (made with syft), checksums and notes generated from the merged PRs, and stamps the version into `tally version` and the `hello` message. It also attests build provenance for the archives, SBOMs and checksums.
+2. The release workflow (`.github/workflows/release.yml`) runs `go vet` and `go test -short`, then GoReleaser on macOS: macOS builds need cgo for serial port discovery, Linux builds are pure Go. It publishes archives for macOS and Linux (arm64 and amd64), an SPDX SBOM per archive (made with syft), checksums and notes generated from the merged PRs, and stamps the version into `tally version` and the `hello` message. It also attests build provenance for the archives, SBOMs and checksums. GoReleaser creates the release as a draft and the workflow publishes it after the attestation, so a failed attestation leaves a draft to re-run rather than a public release without one.
 3. Check the release page and an attestation (`gh attestation verify tally_0.5.0_darwin_arm64.tar.gz --repo sroberts/tally`), then `go install github.com/sroberts/tally@latest` picks up the tag.
 
 To try the release build without publishing, run the release workflow by hand (Actions → release → Run workflow); it builds a snapshot and attaches the archives, SBOMs and checksums as an artifact. To check `.goreleaser.yaml` locally, run `go run github.com/goreleaser/goreleaser/v2@v2.19.0 check`; a local snapshot (`release --snapshot --clean`) needs `syft` on your `PATH` and writes to `dist/`. Versions follow semver; while tally is 0.x, a minor bump can change behavior.
