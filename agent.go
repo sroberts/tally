@@ -34,10 +34,18 @@ func executable() (string, error) {
 	if p, err = filepath.EvalSymlinks(p); err != nil {
 		return "", err
 	}
-	if strings.Contains(p, "go-build") {
-		return "", fmt.Errorf("%s is a temporary go run build; install tally first: go install github.com/sroberts/tally@latest", p)
+	if err := installable(p); err != nil {
+		return "", err
 	}
 	return p, nil
+}
+
+// installable refuses a binary go run built, which goes away when it exits.
+func installable(p string) error {
+	if strings.Contains(p, "go-build") {
+		return fmt.Errorf("%s is a temporary go run build; install tally first: go install github.com/sroberts/tally@latest", p)
+	}
+	return nil
 }
 
 // agentOptions are install-agent's flags.

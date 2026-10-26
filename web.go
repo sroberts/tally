@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,42 +94,56 @@ func showWebSignIn(ws web.Store, pw string) error {
 	if err != nil {
 		return err
 	}
-	serving := webServing(st)
-	port := listenPort(serving.Listen, web.Port)
 	name, _ := web.MagicDNSName(context.Background(), web.FindTailscale())
-	if name == "" {
-		fmt.Println("tailscale is not running here, so the browser pad has no trusted address.")
-		fmt.Println("start tailscale, then run tally web again.")
-		if pw != "" {
-			fmt.Print(generatedPassword(pw))
+	code := ""
+	if name != "" {
+		if code, err = ws.IssueCode(web.QRCodeTTL, time.Now()); err != nil {
+			return err
 		}
-		return nil
 	}
-	code, err := ws.IssueCode(web.QRCodeTTL, time.Now())
-	if err != nil {
-		return err
+	printWebSignIn(os.Stdout, webSignIn{name: name, serving: webServing(st), code: code, pw: pw, browsers: len(st.Browsers)})
+	return nil
+}
+
+// webSignIn is what tally web shows: where the pad is, a sign-in code for
+// it, and the password when tally just generated one.
+type webSignIn struct {
+	name     string // the MagicDNS name; "" when Tailscale isn't running
+	serving  web.Serving
+	code     string
+	pw       string
+	browsers int // signed in already
+}
+
+func printWebSignIn(w io.Writer, s webSignIn) {
+	if s.name == "" {
+		fmt.Fprintln(w, "tailscale is not running here, so the browser pad has no trusted address.")
+		fmt.Fprintln(w, "start tailscale, then run tally web again.")
+		if s.pw != "" {
+			fmt.Fprint(w, generatedPassword(s.pw))
+		}
+		return
 	}
-	base := fmt.Sprintf("https://%s:%d/", name, port)
-	link := base + "?code=" + code
+	base := fmt.Sprintf("https://%s:%d/", s.name, listenPort(s.serving.Listen, web.Port))
+	link := base + "?code=" + s.code
 	qrterminal.GenerateWithConfig(link, qrterminal.Config{
-		Level: qrterminal.L, Writer: os.Stdout, HalfBlocks: true,
+		Level: qrterminal.L, Writer: w, HalfBlocks: true,
 		BlackChar: qrterminal.BLACK_BLACK, WhiteBlackChar: qrterminal.WHITE_BLACK,
 		WhiteChar: qrterminal.WHITE_WHITE, BlackWhiteChar: qrterminal.BLACK_WHITE,
 		QuietZone: 2,
 	})
-	fmt.Printf("scan with your phone's camera to sign in to the browser pad (works once, for %d minutes).\n", int(web.QRCodeTTL.Minutes()))
-	fmt.Printf("  link      %s\n", link)
-	fmt.Printf("  open      %s\n", base)
-	if pw != "" {
-		fmt.Print("  " + generatedPassword(pw))
+	fmt.Fprintf(w, "scan with your phone's camera to sign in to the browser pad (works once, for %d minutes).\n", int(web.QRCodeTTL.Minutes()))
+	fmt.Fprintf(w, "  link      %s\n", link)
+	fmt.Fprintf(w, "  open      %s\n", base)
+	if s.pw != "" {
+		fmt.Fprint(w, "  "+generatedPassword(s.pw))
 	} else {
-		fmt.Printf("  password  set; %d browser(s) signed in (tally web --list)\n", len(st.Browsers))
+		fmt.Fprintf(w, "  password  set; %d browser(s) signed in (tally web --list)\n", s.browsers)
 	}
-	if serving.Cert == "self" {
-		fmt.Println("  the pad's certificate is from tally's own CA (--web-cert self): trust it once on each device first (tally web --ca)")
+	if s.serving.Cert == "self" {
+		fmt.Fprintln(w, "  the pad's certificate is from tally's own CA (--web-cert self): trust it once on each device first (tally web --ca)")
 	}
-	fmt.Println("  run tally web again for a fresh code")
-	return nil
+	fmt.Fprintln(w, "  run tally web again for a fresh code")
 }
 
 // generatedPassword is the line that shows a password tally just made.
