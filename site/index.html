@@ -56,7 +56,7 @@
     </div>
     <div class="cell">
       <h3>talk</h3>
-      <p>Type or dictate a prompt with your phone's keyboard mic and it lands in the agent you're looking at. Press <b>enter</b> on the pad to send it.</p>
+      <p>Type or dictate a prompt with your phone's keyboard mic and it lands in the agent you're looking at. Press <b>enter</b> on the pad to send it. With the herdr TUI for now: the Herdr app can't take text without sending it yet.</p>
     </div>
   </div>
   <p class="note">tally runs in the background next to Herdr and acts on agents through Herdr's own interfaces, not by faking keystrokes, so it works while your editor or browser has focus. It works the same on macOS and Linux.</p>
@@ -69,7 +69,7 @@
     <div class="state"><span class="sw green"></span><b>done</b><span>finished a turn you haven't looked at</span></div>
     <div class="state"><span class="sw blue breathe"></span><b>working</b><span>running</span></div>
     <div class="state"><span class="sw gray"></span><b>ready</b><span>idle, and you've seen its result</span></div>
-    <div class="state"><span class="sw faint"></span><b>unknown</b><span>herdr can't tell yet</span></div>
+    <div class="state"><span class="sw faint"></span><b>unknown</b><span>the herdr TUI can't tell yet (never with the Herdr app)</span></div>
   </div>
 </section>
 
@@ -78,7 +78,7 @@
   <ol class="steps">
     <li>
       <h3>install tally</h3>
-      <p>Needs <a href="https://go.dev/dl/">Go</a> 1.27+ and <a href="https://herdr.dev">Herdr</a>: the app or the herdr TUI. Or grab a binary for macOS or Linux from <a href="https://github.com/sroberts/tally/releases/latest">releases</a>.</p>
+      <p>Needs <a href="https://go.dev/dl/">Go</a> 1.27+ and <a href="https://herdr.dev">Herdr</a>: the app (<code>brew install --cask herdr-app</code>) or the herdr TUI. tally uses the app when it's running. Or grab a binary for macOS or Linux from <a href="https://github.com/sroberts/tally/releases/latest">releases</a>.</p>
       <div class="cmd" data-copy="go install github.com/sroberts/tally@latest"><code><span class="prompt">$</span> go install github.com/sroberts/tally@latest</code><button type="button" aria-label="copy">copy</button></div>
     </li>
     <li>
