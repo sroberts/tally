@@ -46,7 +46,7 @@ Using only the [hardware pad](#the-hardware-pad)? Plug it in and run `tally inst
 
 ### The Herdr app or the herdr TUI
 
-tally reads the Herdr app when it's running (through herdr-core, the server behind it) and the original herdr TUI otherwise. To pin one, pass `--herdr core` or `--herdr tui` to `tally install-agent`, `serve`, `status`, `act` and `doctor`. tally shows one Herdr at a time: the app and the TUI don't share agents.
+tally reads the Herdr app when it's running (through herdr-core, the server behind it) and the original herdr TUI otherwise. It decides when it starts, so after switching between them, restart tally (`tally install-agent` again, or restart `tally serve`); `tally doctor` says which one it found. To pin one, pass `--herdr core` or `--herdr tui` to `tally install-agent`, `serve`, `status`, `act` and `doctor`. tally shows one Herdr at a time: the app and the TUI don't share agents.
 
 With the Herdr app:
 

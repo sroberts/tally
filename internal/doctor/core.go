@@ -20,10 +20,13 @@ func Core(path string, agents, spaces int, err error) Result {
 }
 
 // Window reports on the Herdr app's window, which focus, zoom and new tabs
-// go through: open (err nil), closed, or answering badly.
-func Window(path string, closed bool, err error) Result {
+// go through: open (err nil), closed, or answering badly. Those features
+// also need herdr-core, so with coreOK false an open window is only open.
+func Window(path string, closed bool, err error, coreOK bool) Result {
 	r := Result{Name: "herdr window"}
 	switch {
+	case err == nil && !coreOK:
+		r.Level, r.Detail = OK, "open at "+path
 	case err == nil:
 		r.Level, r.Detail = OK, "open at "+path+": focus marks, focus, zoom and new tabs work"
 	case closed:
@@ -31,6 +34,21 @@ func Window(path string, closed bool, err error) Result {
 		r.Fix = "open the Herdr app"
 	default:
 		r.Level, r.Detail, r.Fix = Warn, path+": "+err.Error(), "restart the Herdr app"
+	}
+	return r
+}
+
+// NotCore says why --herdr auto reads the herdr TUI: herdr-core isn't
+// running, or it is (reachable) but the Herdr app has never laid out its
+// sidebar, so it has no agents to show.
+func NotCore(reachable bool) Result {
+	r := Result{Name: "herdr-core", Level: Info}
+	if reachable {
+		r.Detail = "running, but the Herdr app has no layout yet: tally reads the herdr TUI"
+		r.Fix = "open the Herdr app, then restart tally (tally install-agent, or tally serve)"
+	} else {
+		r.Detail = "not running: tally reads the herdr TUI"
+		r.Fix = "to use the Herdr app, open it, then restart tally"
 	}
 	return r
 }

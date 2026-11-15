@@ -19,13 +19,16 @@ func TestCore(t *testing.T) {
 }
 
 func TestWindow(t *testing.T) {
-	if r := Window("/a", false, nil); r.Level != OK {
+	if r := Window("/a", false, nil, true); r.Level != OK || !strings.Contains(r.Detail, "zoom") {
 		t.Errorf("open: %+v", r)
 	}
-	if r := Window("/a", true, errors.New("closed")); r.Level != Info || r.Fix == "" {
+	if r := Window("/a", false, nil, false); r.Level != OK || strings.Contains(r.Detail, "work") {
+		t.Errorf("open, core down: %+v", r)
+	}
+	if r := Window("/a", true, errors.New("closed"), true); r.Level != Info || r.Fix == "" {
 		t.Errorf("closed: %+v", r)
 	}
-	if r := Window("/a", false, errors.New("bad reply")); r.Level != Warn {
+	if r := Window("/a", false, errors.New("bad reply"), true); r.Level != Warn {
 		t.Errorf("bad: %+v", r)
 	}
 }
@@ -33,5 +36,14 @@ func TestWindow(t *testing.T) {
 func TestAlsoTUI(t *testing.T) {
 	if r := AlsoTUI(1); r.Level != Info || !strings.Contains(r.Detail, "1 agent ") {
 		t.Errorf("%+v", r)
+	}
+}
+
+func TestNotCore(t *testing.T) {
+	if r := NotCore(false); r.Level != Info || !strings.Contains(r.Detail, "not running") {
+		t.Errorf("down: %+v", r)
+	}
+	if r := NotCore(true); r.Level != Info || !strings.Contains(r.Detail, "no layout") {
+		t.Errorf("no layout: %+v", r)
 	}
 }

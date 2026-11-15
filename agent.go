@@ -75,10 +75,10 @@ func installAgent(args []string) error {
 	fs.StringVar(&o.herdr, "herdr", "", herdrFlagHelp+" (default auto)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
-	switch o.herdr {
-	case "", backendAuto, backendCore, backendTUI:
-	default:
-		return fmt.Errorf("--herdr %q: want core, tui or auto", o.herdr)
+	if o.herdr != "" {
+		if err := validBackend(o.herdr); err != nil {
+			return err
+		}
 	}
 
 	program, err := executable()
@@ -150,10 +150,16 @@ func (o agentOptions) serving() web.Serving {
 
 // agentEnv is the environment the agent keeps: the service manager doesn't
 // see the shell's, so carry over which herdr-core session, Herdr window and
-// herdr TUI session to use.
+// herdr TUI session to use. herdr-core also looks under XDG_RUNTIME_DIR;
+// systemd gives a user unit its own, but launchd gives an agent none, so on
+// macOS a shell's is carried too.
 func agentEnv(getenv func(string) string) map[string]string {
 	env := map[string]string{}
-	for _, k := range []string{"HC_SOCKET", "HC_SESSION", "HERDR_APP_HOME", "HERDR_SOCKET_PATH", "HERDR_SESSION"} {
+	keys := []string{"HC_SOCKET", "HC_SESSION", "HERDR_APP_HOME", "HERDR_SOCKET_PATH", "HERDR_SESSION"}
+	if runtime.GOOS == "darwin" {
+		keys = append(keys, "XDG_RUNTIME_DIR")
+	}
+	for _, k := range keys {
 		if v := getenv(k); v != "" {
 			env[k] = v
 		}

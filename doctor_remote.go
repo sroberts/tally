@@ -122,6 +122,10 @@ func checkFirewall(listening bool, fp string, addrs []string, port int) doctor.R
 // table: the target check and key encoding run, and nothing is written.
 func checkWritePath(reader herdrReader) doctor.Result {
 	r := doctor.Result{Name: "write path"}
+	if reader == nil {
+		r.Level, r.Detail = doctor.Info, "not checked: no herdr socket"
+		return r
+	}
 	snap, err := reader.Snapshot()
 	if err != nil {
 		r.Level, r.Detail = doctor.Info, "not checked: herdr is not reachable"
