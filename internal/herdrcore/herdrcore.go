@@ -11,6 +11,7 @@ package herdrcore
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -64,10 +65,7 @@ func socketPath(getenv func(string) string, uid int, exists func(string) bool) (
 	}
 	home := getenv("HOME")
 	if home == "" {
-		var err error
-		if home, err = os.UserHomeDir(); err != nil {
-			return "", err
-		}
+		return "", errors.New("herdr-core: $HOME is not set, so its socket can't be found (set HC_SOCKET)")
 	}
 	return filepath.Join(home, ".local", "state", "herdr-core", session, name), nil
 }
