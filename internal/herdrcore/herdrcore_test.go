@@ -211,6 +211,8 @@ func TestBuildPlacesAndFilters(t *testing.T) {
 	finished.State = "finished"
 	unplaced := term("t4", "working", 0, "0")
 	unplaced.Labels.Space, unplaced.Labels.Tab = "s2", "b"
+	misplaced := term("t7", "idle", 0, "0") // labeled for s2 with s1's tab
+	misplaced.Labels.Space, misplaced.Labels.Tab = "s2", "a"
 	stray := term("t5", "working", 0, "0") // labeled for a space the app doesn't have
 	stray.Labels.Space = "gone"
 	unlabeled := term("t6", "working", 0, "0")
@@ -220,6 +222,7 @@ func TestBuildPlacesAndFilters(t *testing.T) {
 		finished,
 		term("t3", "blocked", 0, "0"),
 		unplaced,
+		misplaced,
 		stray,
 		unlabeled,
 		term("peer/t1", "working", 0, "0"), // another machine's terminal
@@ -230,7 +233,7 @@ func TestBuildPlacesAndFilters(t *testing.T) {
 	for _, a := range s.Agents {
 		got = append(got, a.PaneID+"@"+a.WorkspaceID+"/"+a.TabID)
 	}
-	if want := []string{"t3@s1/a", "t1@s1/a", "t4@s2/b"}; !reflect.DeepEqual(got, want) {
+	if want := []string{"t3@s1/a", "t1@s1/a", "t4@s2/b", "t7@s2/"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("agents = %v, want %v", got, want)
 	}
 	if len(s.Workspaces) != 2 || s.Workspaces[1].Label != "two" || s.Workspaces[1].Number != 2 {
@@ -339,4 +342,11 @@ func TestSocketPath(t *testing.T) {
 	check("xdg", "/xdg/herdr-core/work.sock", none)
 	env["HC_SOCKET"] = "/x/y.sock"
 	check("override", "/x/y.sock", none)
+
+	delete(env, "HC_SOCKET")
+	delete(env, "XDG_RUNTIME_DIR")
+	env["HOME"] = ""
+	if _, err := socketPath(getenv, 501, none); err == nil {
+		t.Error("no HOME: want an error")
+	}
 }

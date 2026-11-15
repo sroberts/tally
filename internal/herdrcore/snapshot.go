@@ -105,10 +105,12 @@ func build(terms []terminal, l layout) *herdr.Snapshot {
 	s := &herdr.Snapshot{Workspaces: []herdr.Workspace{}, Tabs: []herdr.Tab{}, Agents: []herdr.Agent{}}
 	placed := map[string]bool{}
 	spaces := map[string]bool{}
+	tabs := map[string]string{} // tab id -> its space
 	for i, sp := range l.Spaces {
 		spaces[sp.ID] = true
 		s.Workspaces = append(s.Workspaces, herdr.Workspace{ID: sp.ID, Number: i + 1, Label: sp.Name})
 		for j, tab := range sp.Tabs {
+			tabs[tab.ID] = sp.ID
 			s.Tabs = append(s.Tabs, herdr.Tab{ID: tab.ID, WorkspaceID: sp.ID, Number: j + 1})
 			for _, addr := range tab.Root.terminals(nil) {
 				t, ok := agents[addr]
@@ -124,7 +126,11 @@ func build(terms []terminal, l layout) *herdr.Snapshot {
 		a, ok := agents[t.Address]
 		if ok && !placed[t.Address] && spaces[a.Labels.Space] {
 			placed[t.Address] = true
-			s.Agents = append(s.Agents, agent(a, a.Labels.Space, a.Labels.Tab))
+			tab := a.Labels.Tab
+			if tabs[tab] != a.Labels.Space {
+				tab = "" // a tab that isn't in that space, or is gone
+			}
+			s.Agents = append(s.Agents, agent(a, a.Labels.Space, tab))
 		}
 	}
 	return s
