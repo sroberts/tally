@@ -27,7 +27,8 @@ commands:
                                    keep the MacroPad's lights in step with herdr;
                                    --remote also serves paired phones on :47824,
                                    --web serves the browser pad over HTTPS on :47825
-  status [--json] [--slots N]      show herdr's agents in slot order (--json prints the frame)
+  status [--json] [--slots N] [--herdr core|tui|auto]
+                                   show herdr's agents in slot order (--json prints the frame)
   frame [--port PATH] '<json>'     send one raw frame to the MacroPad ('-' reads stdin)
   act <action> [--target PANE] [--slot N] [--text STR] [--dry-run]
                                    run one pad action against herdr

@@ -72,11 +72,12 @@ node --test internal/web/static/lighting_test.mjs    # the lighting tests alone
 - The device tests use a pty pair as the serial port.
 - `go test ./internal/remote` runs the remote listener in-process against a fake herdr writer. `go test ./internal/web` does the same for the browser pad.
 - `testdata/snapshots/` holds captured `session.snapshot` responses with every private string replaced by a `SECRET-` marker; the decoder test fails if one survives. Capture new fixtures the same way.
+- `testdata/core/` holds the same for herdr-core: a `terminal.list` response and the Herdr app's `herdr-app` layout document, keeping only ids, states, turns and the `herdr.space`/`herdr.tab`/`herdr.seen` labels (space names are `space-label-N`).
 
 Handy commands while working:
 
 ```bash
-tally status                         # herdr's agents in slot order
+tally status                         # herdr's agents in slot order (--herdr core|tui|auto)
 tally status --json | tally frame -  # light the pad from live herdr state, once
 tally act submit --dry-run           # print an action's herdr calls without making them
 tally serve --verbose                # log every frame and action
