@@ -154,6 +154,13 @@ func (c *Client) layout() (layout, error) {
 	return *doc.Value, nil
 }
 
+// HasLayout reports whether the Herdr app has laid out any space, reading
+// only the layout document.
+func (c *Client) HasLayout() (bool, error) {
+	l, err := c.layout()
+	return len(l.Spaces) > 0, err
+}
+
 // build is Snapshot without the socket.
 func build(terms []terminal, l layout) *herdr.Snapshot {
 	agents := make(map[string]terminal, len(terms))

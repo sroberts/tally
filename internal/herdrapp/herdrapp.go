@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -31,6 +32,9 @@ const Timeout = 6 * time.Second
 // focus is optional: a window that is slow to answer must not hold up the
 // lights or an action.
 const StatusTimeout = 500 * time.Millisecond
+
+// maxReply bounds one reply line; the window's replies are small.
+const maxReply = 1 << 20
 
 // Closed is the herdr.Error code for a Herdr window that isn't open.
 const Closed = "window_closed"
@@ -79,7 +83,7 @@ func call(path string, req any, out any, timeout time.Duration) error {
 	if _, err := conn.Write(append(line, '\n')); err != nil {
 		return &herdr.Error{Code: Closed, Message: "the Herdr window isn't open"}
 	}
-	reply, err := bufio.NewReaderSize(conn, 64*1024).ReadBytes('\n')
+	reply, err := bufio.NewReaderSize(io.LimitReader(conn, maxReply), 64*1024).ReadBytes('\n')
 	if err != nil {
 		return fmt.Errorf("herdr-app: reading reply: %w", err)
 	}
@@ -117,7 +121,7 @@ func (v *Viewer) Status() (Status, error) {
 	err := call(v.Path, struct {
 		Status bool `json:"status"`
 	}{true}, &s, StatusTimeout)
-	return s, err
+	return s, scrub("status", err)
 }
 
 // Window runs the action table's window commands.

@@ -72,6 +72,9 @@ func serve(args []string) error {
 
 	// auto picks once: give a Herdr app still starting at login a chance.
 	path, reader, err := awaitHerdr(ctx, *backend, autoWait, 2*time.Second, log)
+	if ctx.Err() != nil {
+		return nil // stopped while waiting: a clean exit, as after serving
+	}
 	if err != nil {
 		return err
 	}
