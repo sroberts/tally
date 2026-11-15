@@ -36,7 +36,11 @@ func TestListenerRefusesTLS12(t *testing.T) {
 // a pad's WebSocket outlives both request timeouts.
 func TestRequestTimeoutsSpareTheWebSocket(t *testing.T) {
 	r, w := readTimeout, writeTimeout
-	readTimeout, writeTimeout = 200*time.Millisecond, time.Second // sign-in's argon2id needs a moment
+	// The write timeout runs while sign-in hashes the password. argon2id
+	// under -race on a small CI runner can take over a second, and a
+	// deadline that passes mid-response breaks the TLS stream ("bad record
+	// MAC"), so leave it plenty of room.
+	readTimeout, writeTimeout = 200*time.Millisecond, 5*time.Second
 	t.Cleanup(func() { readTimeout, writeTimeout = r, w })
 	h := start(t)
 
