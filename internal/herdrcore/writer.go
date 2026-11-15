@@ -9,8 +9,10 @@ import (
 )
 
 // WriteTimeout bounds one write. herdr-core holds keys and text until nobody
-// has typed for about 3 s, so a write can wait that long before it lands.
-const WriteTimeout = 10 * time.Second
+// has typed in that terminal for about 3 s, so a write can wait while a
+// person types. A write that times out may still land once they stop; the
+// long bound keeps that rare, since a client told it failed may press again.
+const WriteTimeout = 30 * time.Second
 
 // writeAllowed lists every herdr-core method a Writer may call. It exists
 // only while tally serve --remote/--web (or tally act) runs; the read-only
@@ -71,16 +73,19 @@ func (w *Writer) Submit(terminal, text string) error {
 // Focus shows the terminal's agent in the window.
 func (w *Writer) Focus(terminal string) error { return w.App.FocusAgent(terminal) }
 
-// Zoom toggles the zoom of the pane showing the terminal.
+// Zoom toggles the zoom of the pane showing the terminal: the window's
+// focused pane when it shows it, else the first pane that does in layout
+// order.
 func (w *Writer) Zoom(terminal string) error {
 	l, err := w.read.layout()
 	if err != nil {
 		return err
 	}
-	for pane, t := range l.panes() {
-		if t == terminal {
-			return w.App.Zoom(pane)
-		}
+	if st, err := w.App.Status(); err == nil && st.Pane != "" && l.terminalAt(st.Pane) == terminal {
+		return w.App.Zoom(st.Pane)
+	}
+	if pane := l.paneOf(terminal); pane != "" {
+		return w.App.Zoom(pane)
 	}
 	return &herdr.Error{Code: "not_found", Message: "no pane shows " + terminal}
 }
