@@ -39,11 +39,12 @@ func openHerdr(choice string) (string, herdrReader, error) {
 		coreUp, layout := false, false
 		if cerr == nil && core.Ping() == nil {
 			coreUp = true
-			if snap, err := core.Snapshot(); err == nil {
-				layout = len(snap.Workspaces) > 0
-			}
+			// Only the layout doc: a full Snapshot would read every screen
+			// just to pick a backend.
+			layout, _ = core.HasLayout()
 		}
-		tuiUp := terr == nil && tui.Ping() == nil
+		// With a laid-out herdr-core, auto picks it whatever the TUI says.
+		tuiUp := !(coreUp && layout) && terr == nil && tui.Ping() == nil
 		switch {
 		case pickAuto(coreUp, layout, tuiUp) == backendCore && cerr == nil:
 			return cpath, core, nil
