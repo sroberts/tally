@@ -39,10 +39,10 @@ commands:
                                    or write the CA to trust for --web-cert self;
                                    with no flags, show where to open it
   install-agent [--remote] [--listen ADDR] [--web] [--web-listen ADDR] [--web-cert MODE]
-                [--no-device] [--port PATH] [--slots N]
+                [--no-device] [--port PATH] [--slots N] [--herdr core|tui|auto]
                                    run tally serve at login (LaunchAgent or systemd unit), and now
   uninstall-agent                  stop and remove the background agent
-  doctor                           check herdr, its settings, the agent, the browser pad and the MacroPad
+  doctor [--herdr core|tui|auto]   check herdr, its settings, the agent, the browser pad and the MacroPad
   version                          print tally's version
 `
 

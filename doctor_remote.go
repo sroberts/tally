@@ -20,7 +20,7 @@ import (
 
 // checkRemote checks the remote listener's side: the listener, paired phones,
 // Bonjour, Tailscale, the firewall and the write path.
-func checkRemote() []doctor.Result {
+func checkRemote(reader herdrReader) []doctor.Result {
 	store, err := pairing.DefaultStore()
 	if err != nil {
 		return []doctor.Result{{Name: "remote", Level: doctor.Warn, Detail: err.Error()}}
@@ -55,7 +55,7 @@ func checkRemote() []doctor.Result {
 	out, err := web.TailscaleStatus(context.Background(), web.FindTailscale())
 	results = append(results, doctor.Tailscale(out, err))
 	results = append(results, checkFirewall(listening, fp, addrs, port))
-	return append(results, checkWritePath())
+	return append(results, checkWritePath(reader))
 }
 
 func probe(addr, fp string) error {
@@ -120,14 +120,12 @@ func checkFirewall(listening bool, fp string, addrs []string, port int) doctor.R
 
 // checkWritePath dry-runs ENTER on the focused agent through the action
 // table: the target check and key encoding run, and nothing is written.
-func checkWritePath() doctor.Result {
+func checkWritePath(reader herdrReader) doctor.Result {
 	r := doctor.Result{Name: "write path"}
-	path, err := herdr.SocketPath()
-	if err != nil {
-		r.Level, r.Detail = doctor.Warn, err.Error()
+	if reader == nil {
+		r.Level, r.Detail = doctor.Info, "not checked: no herdr socket"
 		return r
 	}
-	reader := herdr.New(path)
 	snap, err := reader.Snapshot()
 	if err != nil {
 		r.Level, r.Detail = doctor.Info, "not checked: herdr is not reachable"
@@ -138,8 +136,8 @@ func checkWritePath() doctor.Result {
 		return r
 	}
 	target := snap.Agents[0].PaneID
-	rec := &actions.Recorder{}
-	t := &actions.Table{W: rec, Snapshot: func() (*herdr.Snapshot, error) { return snap, nil }}
+	w, rec := newRecorder(reader)
+	t := &actions.Table{W: w, Snapshot: func() (*herdr.Snapshot, error) { return snap, nil }}
 	if err := t.Do(actions.Request{Name: "submit", Target: target}); err != nil {
 		r.Level, r.Detail = doctor.Fail, "dry run failed: "+err.Error()
 		return r

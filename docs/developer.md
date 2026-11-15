@@ -85,10 +85,11 @@ tally serve --verbose                # log every frame and action
 
 ### Trying a live listener without touching your setup
 
-Point `HOME` at a scratch directory so your real pairing, password and certificate stay untouched, with `HERDR_SOCKET_PATH` set to the real socket (use a literal path, not one built from `$HOME`):
+Point `HOME` at a scratch directory so your real pairing, password and certificate stay untouched, with `HC_SOCKET` (herdr-core), `HERDR_APP_HOME` (the Herdr window) or `HERDR_SOCKET_PATH` (the herdr TUI) set to the real one (use a literal path, not one built from `$HOME`):
 
 ```bash
-export HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock
+export HC_SOCKET=~/.local/state/herdr-core/default/default.sock HERDR_APP_HOME=~/.config/herdr-app
+export HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock   # for --herdr tui
 HOME=$scratch tally pair --json
 HOME=$scratch tally serve --remote --no-device --listen 127.0.0.1:47999
 HOME=$scratch tally web --set-password --password-stdin <<< 'a scratch password'
@@ -118,7 +119,7 @@ tally doctor
 
 ## Rules that hold across changes
 
-- The serial path stays read-only. Only `tally serve --remote`/`--web` and `tally act` construct the herdr writer.
+- The serial path stays read-only. Only `tally serve --remote`/`--web` and `tally act` construct a herdr writer (`herdr.Writer` or `herdrcore.Writer`). The read path reaches the Herdr window only through `herdrapp.Viewer`, which can send nothing but `status`.
 - Clients send action names, never keys. Actions are never retried. Nothing is accepted from a phone before auth, or from a browser before sign-in.
 - No agent titles, cwds or terminal output leave the host or reach a log line.
 - The v2 serial frame stays byte-compatible with the pad firmware in [vibe-macropad](https://github.com/sroberts/vibe-macropad). Protocol changes for remote clients go in v3 only, and change every client with it.
@@ -130,4 +131,5 @@ tally doctor
 - [`design/tally-macropad.md`](design/tally-macropad.md): the daemon, slot ordering, serial protocol v2.
 - [`design/remote.md`](design/remote.md): the remote listener for paired phones, pairing and the action table. [`protocol-v3.md`](protocol-v3.md) is its wire format.
 - [`design/browser-pad.md`](design/browser-pad.md): the browser pad, its sign-in and certificates.
+- [`design/herdr-core.md`](design/herdr-core.md): reading and driving herdr-core and the Herdr window, the backend `--herdr auto` prefers.
 - [`m0-herdr-input.md`](m0-herdr-input.md): which herdr methods and key names the action table uses.

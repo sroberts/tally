@@ -70,7 +70,16 @@ func resolveHerdr(choice string) (string, herdrReader, bool, error) {
 		}
 		return "", nil, false, terr
 	}
-	return "", nil, false, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
+	return "", nil, false, validBackend(choice)
+}
+
+// validBackend refuses a --herdr value that isn't a choice.
+func validBackend(choice string) error {
+	switch choice {
+	case backendAuto, backendCore, backendTUI:
+		return nil
+	}
+	return fmt.Errorf("--herdr %q: want core, tui or auto", choice)
 }
 
 // autoWait bounds how long tally serve --herdr auto waits at start for

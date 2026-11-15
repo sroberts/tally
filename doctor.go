@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,11 +13,19 @@ import (
 	"github.com/sroberts/tally/internal/device"
 	"github.com/sroberts/tally/internal/doctor"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/herdrapp"
+	"github.com/sroberts/tally/internal/herdrcore"
 	"github.com/sroberts/tally/internal/launchd"
 	"github.com/sroberts/tally/internal/systemd"
 )
 
 func doctorCmd(args []string) error {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	backend := fs.String("herdr", backendAuto, herdrFlagHelp)
+	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+	fs.Parse(args)
+	path, reader, herr := openHerdr(*backend)
+
 	var agent launchd.State
 	var agentResult doctor.Result
 	if runtime.GOOS == "linux" {
@@ -24,12 +33,26 @@ func doctorCmd(args []string) error {
 	} else {
 		agent, agentResult = checkAgent()
 	}
-	results := []doctor.Result{checkHerdr(), checkClaude(), checkSort(), {
-		Name: "agents view", Level: doctor.Info,
-		Detail: "not checked: herdr can only set or clear a plugin Agents view, and Tally never writes",
-		Fix:    "if keys and the sidebar disagree, clear any plugin that reorders the Agents view",
-	}, agentResult, checkPad(agent)}
-	results = append(results, checkRemote()...)
+	var results []doctor.Result
+	if herr != nil {
+		// No socket to check, but the rest of the report still helps.
+		results = []doctor.Result{{Name: "herdr", Level: doctor.Fail, Detail: herr.Error(),
+			Fix: "set HC_SOCKET (herdr-core) or HERDR_SOCKET_PATH (herdr TUI)"}}
+		reader = nil
+	} else if c, ok := reader.(*herdrcore.Client); ok {
+		results = checkCore(path, c)
+	} else {
+		if *backend == backendAuto {
+			results = append(results, checkCoreAbsent())
+		}
+		results = append(results, checkHerdr(path), checkClaude(), checkSort(), doctor.Result{
+			Name: "agents view", Level: doctor.Info,
+			Detail: "not checked: herdr can only set or clear a plugin Agents view, and Tally never writes",
+			Fix:    "if keys and the sidebar disagree, clear any plugin that reorders the Agents view",
+		})
+	}
+	results = append(results, agentResult, checkPad(agent))
+	results = append(results, checkRemote(reader)...)
 	results = append(results, checkWeb()...)
 
 	failed := false
@@ -46,17 +69,53 @@ func doctorCmd(args []string) error {
 	return nil
 }
 
-func checkHerdr() doctor.Result {
-	r := doctor.Result{Name: "herdr"}
-	path, err := herdr.SocketPath()
+// checkCore checks herdr-core, the Herdr window, and whether a herdr TUI
+// with agents of its own is running too.
+func checkCore(path string, c *herdrcore.Client) []doctor.Result {
+	agents, spaces := 0, 0
+	err := c.Ping()
 	if err == nil {
-		c := herdr.New(path)
-		if err = c.Ping(); err == nil {
-			var snap *herdr.Snapshot
-			if snap, err = c.Snapshot(); err == nil {
-				r.Level, r.Detail = doctor.OK, fmt.Sprintf("reachable at %s, %d agents", path, len(snap.Agents))
-				return r
-			}
+		var snap *herdr.Snapshot
+		if snap, err = c.Snapshot(); err == nil {
+			agents, spaces = len(snap.Agents), len(snap.Workspaces)
+		}
+	}
+	results := []doctor.Result{doctor.Core(path, agents, spaces, err)}
+	if c.App == nil {
+		results = append(results, doctor.Window("", true, errors.New("no socket path"), err == nil))
+	} else {
+		_, werr := c.App.Status()
+		var he *herdr.Error
+		closed := errors.As(werr, &he) && he.Code == herdrapp.Closed
+		results = append(results, doctor.Window(c.App.Path, closed, werr, err == nil))
+	}
+	if tp, err := herdr.SocketPath(); err == nil {
+		if snap, err := herdr.New(tp).Snapshot(); err == nil && len(snap.Agents) > 0 {
+			results = append(results, doctor.AlsoTUI(len(snap.Agents)))
+		}
+	}
+	return results
+}
+
+// checkCoreAbsent says why auto is reading the herdr TUI rather than
+// herdr-core: it isn't running, or the Herdr app hasn't laid anything out.
+func checkCoreAbsent() doctor.Result {
+	_, c, err := openCore()
+	if err == nil {
+		err = c.Ping()
+	}
+	return doctor.NotCore(err == nil)
+}
+
+func checkHerdr(path string) doctor.Result {
+	r := doctor.Result{Name: "herdr"}
+	c := herdr.New(path)
+	err := c.Ping()
+	if err == nil {
+		var snap *herdr.Snapshot
+		if snap, err = c.Snapshot(); err == nil {
+			r.Level, r.Detail = doctor.OK, fmt.Sprintf("reachable at %s, %d agents", path, len(snap.Agents))
+			return r
 		}
 	}
 	r.Level, r.Detail, r.Fix = doctor.Fail, err.Error(), "start herdr"
