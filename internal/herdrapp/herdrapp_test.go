@@ -152,3 +152,19 @@ func TestSocketPath(t *testing.T) {
 		t.Errorf("home: %s", p)
 	}
 }
+
+func TestStatusRefusalIsScrubbed(t *testing.T) {
+	path, _ := fakeWindow(t, func(string) string { return `{"error":"SECRET title"}` })
+	_, err := (&Viewer{Path: path}).Status()
+	var he *herdr.Error
+	if !errors.As(err, &he) || he.Code != Refused || strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOversizedReply(t *testing.T) {
+	path, _ := fakeWindow(t, func(string) string { return `{"error":"` + strings.Repeat("x", maxReply) + `"}` })
+	if err := NewWindow(path).FocusAgent("t1"); err == nil {
+		t.Fatal("a reply past maxReply was accepted")
+	}
+}

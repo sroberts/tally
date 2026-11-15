@@ -37,7 +37,7 @@ func openHerdr(choice string) (string, herdrReader, error) {
 }
 
 // resolveHerdr is openHerdr that also says whether, for auto, the herdr it
-// picked answered.
+// picked answered (for herdr-core, answered with a layout).
 func resolveHerdr(choice string) (string, herdrReader, bool, error) {
 	switch choice {
 	case backendCore:
@@ -60,7 +60,9 @@ func resolveHerdr(choice string) (string, herdrReader, bool, error) {
 		tuiUp := !(coreUp && layout) && terr == nil && tui.Ping() == nil
 		switch {
 		case pickAuto(coreUp, layout, tuiUp) == backendCore && cerr == nil:
-			return cpath, core, coreUp, nil
+			// A bare herdr-core (no layout) isn't settled on while waiting: a
+			// herdr TUI still starting at login would lose to it for good.
+			return cpath, core, coreUp && layout, nil
 		case terr == nil:
 			return tpath, tui, tuiUp, nil
 		case cerr == nil:
