@@ -1,0 +1,8 @@
+# How GitHub groups a release's notes: one line per merged PR since the
+# previous tag. GoReleaser asks for these (changelog.use: github-native).
+changelog:
+  categories:
+    - title: Dependencies
+      labels: [dependencies] # Dependabot's update PRs
+    - title: Changes
+      labels: ["*"]
