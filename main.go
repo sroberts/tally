@@ -23,7 +23,7 @@ const usage = `usage: tally <command> [arguments]
 
 commands:
   serve [--remote] [--listen ADDR] [--web] [--web-listen ADDR] [--web-cert tailscale|self]
-        [--no-device] [--port PATH] [--slots N] [--verbose]
+        [--no-device] [--port PATH] [--slots N] [--herdr tui|core|auto] [--verbose]
                                    keep the MacroPad's lights in step with herdr;
                                    --remote also serves paired phones on :47824,
                                    --web serves the browser pad over HTTPS on :47825

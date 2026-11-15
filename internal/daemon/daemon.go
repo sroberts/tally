@@ -1,10 +1,11 @@
 // Package daemon is tally serve: it keeps the pad's Fleet lights in step
 // with herdr.
 //
-// Two subscriptions only invalidate: the lifecycle one (agents appearing,
-// moving, closing, focus) and the agent status one (one entry per agent
-// pane). The actor goroutine owns all state. It waits Debounce after the
-// first invalidation, takes one session.snapshot, and emits a frame when the
+// Subscriptions only invalidate. Against the herdr TUI there are two: the
+// lifecycle one (agents appearing, moving, closing, focus) and the agent
+// status one (one entry per agent pane). herdr-core has a single stream for
+// every change, so against it there is one. The actor goroutine owns all state. It waits Debounce after the
+// first invalidation, takes one snapshot, and emits a frame when the
 // result differs from the last one. A safety poll takes a snapshot even
 // without events, which bounds a missed event to SafetyPoll of staleness.
 // Event payloads are never applied: herdr orders events only within a
@@ -30,6 +31,14 @@ type Herdr interface {
 	Subscribe(ctx context.Context, subs []herdr.Subscription, notify func()) error
 }
 
+// Stream is a herdr whose one subscription carries every change, as
+// herdr-core's does. The daemon holds that subscription alone, in place of
+// the herdr TUI's lifecycle and per-pane agent status pair.
+type Stream interface {
+	Snapshot() (*herdr.Snapshot, error)
+	SubscribeAll(ctx context.Context, notify func()) error
+}
+
 // Config holds the daemon's timings and slot count.
 type Config struct {
 	Slots      int
@@ -46,10 +55,11 @@ func Defaults() Config {
 
 // Daemon turns herdr's state into frames.
 type Daemon struct {
-	cfg   Config
-	herdr Herdr
-	emit  func(slots.Frame) // called from the actor only; must not block
-	log   *slog.Logger
+	cfg    Config
+	herdr  Herdr             // nil when stream is set
+	stream Stream            // nil when herdr is set
+	emit   func(slots.Frame) // called from the actor only; must not block
+	log    *slog.Logger
 
 	update  func(Update) // optional; called from the actor after every snapshot
 	tracker slots.Tracker
@@ -58,10 +68,25 @@ type Daemon struct {
 	panes      chan []string // cap 1: the latest agent pane set to watch
 }
 
-// New returns a daemon that reads h and passes each new frame to emit.
+// New returns a daemon that reads the herdr TUI through h and passes each
+// new frame to emit.
 func New(cfg Config, h Herdr, emit func(slots.Frame), log *slog.Logger) *Daemon {
 	return &Daemon{cfg: cfg, herdr: h, emit: emit, log: log,
 		invalidate: make(chan struct{}, 1), panes: make(chan []string, 1)}
+}
+
+// NewStream returns a daemon that reads a single-stream herdr (herdr-core)
+// through s and passes each new frame to emit.
+func NewStream(cfg Config, s Stream, emit func(slots.Frame), log *slog.Logger) *Daemon {
+	return &Daemon{cfg: cfg, stream: s, emit: emit, log: log,
+		invalidate: make(chan struct{}, 1), panes: make(chan []string, 1)}
+}
+
+func (d *Daemon) snapshot() (*herdr.Snapshot, error) {
+	if d.stream != nil {
+		return d.stream.Snapshot()
+	}
+	return d.herdr.Snapshot()
 }
 
 // Update is the actor's view after one snapshot attempt, for clients that
@@ -82,6 +107,12 @@ func (d *Daemon) OnUpdate(f func(Update)) { d.update = f }
 // Run blocks until ctx is done.
 func (d *Daemon) Run(ctx context.Context) {
 	done := make(chan struct{})
+	if d.stream != nil {
+		go func() { d.hold(ctx, "event subscription", d.stream.SubscribeAll); done <- struct{}{} }()
+		d.actor(ctx)
+		<-done
+		return
+	}
 	go func() { d.lifecycle(ctx); done <- struct{}{} }()
 	go func() { d.agentStatus(ctx); done <- struct{}{} }()
 	d.actor(ctx)
@@ -109,7 +140,7 @@ func (d *Daemon) actor(ctx context.Context) {
 	refresh := func() {
 		var f slots.Frame
 		var panes []string
-		snap, err := d.herdr.Snapshot()
+		snap, err := d.snapshot()
 		if err != nil {
 			if err.Error() != lastErr {
 				d.log.Info("herdr offline", "err", err)
@@ -135,7 +166,7 @@ func (d *Daemon) actor(ctx context.Context) {
 			d.update(Update{})
 		}
 
-		if set := strings.Join(panes, " "); set != watched {
+		if set := strings.Join(panes, " "); set != watched && d.stream == nil {
 			watched = set
 			select {
 			case <-d.panes:
@@ -172,20 +203,27 @@ func (d *Daemon) actor(ctx context.Context) {
 	}
 }
 
-// lifecycle holds the lifecycle subscription open, resubscribing after any
-// failure. Every subscription start and every end invalidates, so the actor
-// reconciles from a fresh snapshot.
+// lifecycle holds the herdr TUI's lifecycle subscription open.
 func (d *Daemon) lifecycle(ctx context.Context) {
+	d.hold(ctx, "lifecycle subscription", func(ctx context.Context, notify func()) error {
+		return d.herdr.Subscribe(ctx, herdr.Lifecycle, notify)
+	})
+}
+
+// hold keeps one subscription open, resubscribing after any failure. Every
+// subscription start and every end invalidates, so the actor reconciles from
+// a fresh snapshot.
+func (d *Daemon) hold(ctx context.Context, name string, subscribe func(context.Context, func()) error) {
 	var lastErr string
 	lost := lostBackoff{cfg: d.cfg}
 	for {
 		began := time.Now()
-		err := d.herdr.Subscribe(ctx, herdr.Lifecycle, d.poke)
+		err := subscribe(ctx, d.poke)
 		if ctx.Err() != nil {
 			return
 		}
 		if err.Error() != lastErr {
-			d.log.Info("lifecycle subscription ended", "err", err)
+			d.log.Info(name+" ended", "err", err)
 		}
 		lastErr = err.Error()
 		d.poke()

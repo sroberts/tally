@@ -15,9 +15,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/daemon"
 	"github.com/sroberts/tally/internal/device"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/herdrcore"
 	"github.com/sroberts/tally/internal/pairing"
 	"github.com/sroberts/tally/internal/remote"
 	"github.com/sroberts/tally/internal/slots"
@@ -50,11 +52,12 @@ func serve(args []string) error {
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
 	webListen := fs.String("web-listen", fmt.Sprintf(":%d", web.Port), "address for --web")
+	backend := fs.String("herdr", backendTUI, herdrFlagHelp+" (actions don't run against core yet)")
 	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (from Let's Encrypt via tailscale cert) or self (from tally's own CA; trust it with tally web --ca)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
-	path, err := herdr.SocketPath()
+	path, reader, err := openHerdr(*backend)
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,7 @@ func serve(args []string) error {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	log.Info("tally serve", "herdr", path, "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
+	log.Info("tally serve", "herdr", path, "backend", backendName(reader), "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
 	if *webCert != "tailscale" && *webCert != "self" {
 		return fmt.Errorf("--web-cert must be tailscale or self, not %q", *webCert)
 	}
@@ -92,12 +95,23 @@ func serve(args []string) error {
 		}
 		wg.Go(func() { link.Run(ctx) })
 	}
-	reader := herdr.New(path)
-	d := daemon.New(cfg, reader, emit, log)
+	var d *daemon.Daemon
+	switch r := reader.(type) {
+	case *herdrcore.Client:
+		d = daemon.NewStream(cfg, r, emit, log)
+	case *herdr.Client:
+		d = daemon.New(cfg, r, emit, log)
+	default:
+		return fmt.Errorf("no daemon for %T", reader)
+	}
 
 	var srv *remote.Server
 	if *remoteOn || *webOn {
-		if srv, err = newRemote(path, reader, cfg.Slots, *listen, log); err != nil {
+		var writer actions.Writer = noActions{}
+		if _, ok := reader.(*herdr.Client); ok {
+			writer = herdr.NewWriter(path) // the only herdr Writer while tally serves
+		}
+		if srv, err = newRemote(reader, writer, cfg.Slots, *listen, log); err != nil {
 			return err
 		}
 		d.OnUpdate(srv.Publish)
@@ -188,9 +202,9 @@ func everyInterface(listen string) bool {
 	return h == "" || h == "0.0.0.0" || h == "::"
 }
 
-// newRemote builds the remote listener's server. It is the only place a herdr
-// Writer exists while tally serves.
-func newRemote(path string, reader *herdr.Client, n int, listen string, log *slog.Logger) (*remote.Server, error) {
+// newRemote builds the remote listener's server around the one writer serve
+// made.
+func newRemote(reader herdrReader, writer actions.Writer, n int, listen string, log *slog.Logger) (*remote.Server, error) {
 	store, err := pairing.DefaultStore()
 	if err != nil {
 		return nil, err
@@ -214,7 +228,7 @@ func newRemote(path string, reader *herdr.Client, n int, listen string, log *slo
 	log.Info("remote identity", "host", host, "host_id", hostID, "cert_sha256", fp)
 	return remote.New(remote.Config{
 		Store: store, Slots: n, HostName: host, HostID: hostID, Version: tallyVersion(),
-		Writer: herdr.NewWriter(path), Snapshot: reader.Snapshot,
+		Writer: writer, Snapshot: reader.Snapshot,
 		Bonjour: everyInterface(listen),
 		Log:     log,
 	}, cert), nil
