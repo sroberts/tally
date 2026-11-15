@@ -1,10 +1,14 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
+	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/herdrapp"
 	"github.com/sroberts/tally/internal/herdrcore"
 )
 
@@ -28,11 +32,20 @@ const herdrFlagHelp = "which herdr to read: core (the Herdr app), tui (the origi
 // herdr. auto picks between them with pickAuto, so a user who hasn't moved
 // to the app keeps working.
 func openHerdr(choice string) (string, herdrReader, error) {
+	path, r, _, err := resolveHerdr(choice)
+	return path, r, err
+}
+
+// resolveHerdr is openHerdr that also says whether, for auto, the herdr it
+// picked answered (for herdr-core, answered with a layout).
+func resolveHerdr(choice string) (string, herdrReader, bool, error) {
 	switch choice {
 	case backendCore:
-		return openCore()
+		path, c, err := openCore()
+		return path, c, false, err
 	case backendTUI:
-		return openTUI()
+		path, c, err := openTUI()
+		return path, c, false, err
 	case backendAuto:
 		cpath, core, cerr := openCore()
 		tpath, tui, terr := openTUI()
@@ -47,15 +60,43 @@ func openHerdr(choice string) (string, herdrReader, error) {
 		tuiUp := !(coreUp && layout) && terr == nil && tui.Ping() == nil
 		switch {
 		case pickAuto(coreUp, layout, tuiUp) == backendCore && cerr == nil:
-			return cpath, core, nil
+			// A bare herdr-core (no layout) isn't settled on while waiting: a
+			// herdr TUI still starting at login would lose to it for good.
+			return cpath, core, coreUp && layout, nil
 		case terr == nil:
-			return tpath, tui, nil
+			return tpath, tui, tuiUp, nil
 		case cerr == nil:
-			return cpath, core, nil
+			return cpath, core, coreUp, nil
 		}
-		return "", nil, terr
+		return "", nil, false, terr
 	}
-	return "", nil, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
+	return "", nil, false, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
+}
+
+// autoWait bounds how long tally serve --herdr auto waits at start for
+// either herdr to answer, so a login start before the Herdr app doesn't
+// settle on the wrong one for the life of the process.
+const autoWait = time.Minute
+
+// awaitHerdr is openHerdr for tally serve. auto picks once, at start; while
+// neither herdr answers it keeps asking for up to wait, then settles for the
+// fallback and lets the daemon report herdr offline.
+func awaitHerdr(ctx context.Context, choice string, wait, every time.Duration, log *slog.Logger) (string, herdrReader, error) {
+	deadline := time.Now().Add(wait)
+	for logged := false; ; logged = true {
+		path, r, up, err := resolveHerdr(choice)
+		if err != nil || up || choice != backendAuto || !time.Now().Before(deadline) {
+			return path, r, err
+		}
+		if !logged {
+			log.Info("waiting for herdr-core or the herdr TUI to answer", "for", wait)
+		}
+		select {
+		case <-ctx.Done():
+			return path, r, ctx.Err()
+		case <-time.After(every):
+		}
+	}
 }
 
 // backendName names the herdr a reader talks to, for logs.
@@ -83,30 +124,18 @@ func pickAuto(coreUp, coreLayout, tuiUp bool) string {
 	return backendTUI
 }
 
-// errNoCoreActions is every action's answer against herdr-core until its
-// writers land: refusing is better than writing to the TUI's socket.
-var errNoCoreActions = errors.New("actions don't run against herdr-core yet; use --herdr tui")
-
-// noActions is the remote listener's writer against herdr-core for now. It
-// refuses every call.
-type noActions struct{}
-
-func (noActions) SendKeys(string, ...string) error { return errNoCoreActions }
-func (noActions) SendText(string, string) error    { return errNoCoreActions }
-func (noActions) Focus(string) error               { return errNoCoreActions }
-func (noActions) Zoom(string) error                { return errNoCoreActions }
-func (noActions) Pane(string) (herdr.PaneInfo, error) {
-	return herdr.PaneInfo{}, errNoCoreActions
-}
-func (noActions) CreateTab(string, string) (string, error) { return "", errNoCoreActions }
-func (noActions) Run(string, herdr.Command) error          { return errNoCoreActions }
-
+// openCore returns a herdr-core client that asks the Herdr window for
+// focus. Without a window socket path it reads herdr-core alone.
 func openCore() (string, *herdrcore.Client, error) {
 	path, err := herdrcore.SocketPath()
 	if err != nil {
 		return "", nil, err
 	}
-	return path, herdrcore.New(path), nil
+	c := herdrcore.New(path)
+	if app, err := herdrapp.SocketPath(); err == nil {
+		c.App = &herdrapp.Viewer{Path: app}
+	}
+	return path, c, nil
 }
 
 func openTUI() (string, *herdr.Client, error) {
@@ -115,4 +144,27 @@ func openTUI() (string, *herdr.Client, error) {
 		return "", nil, err
 	}
 	return path, herdr.New(path), nil
+}
+
+// newWriter makes the one herdr writer for the reader's herdr. Only tally
+// serve --remote/--web and tally act call it.
+func newWriter(path string, r herdrReader) (actions.Writer, error) {
+	if c, ok := r.(*herdrcore.Client); ok {
+		app := ""
+		if c.App != nil {
+			app = c.App.Path
+		}
+		return herdrcore.NewWriter(path, app), nil
+	}
+	return herdr.NewWriter(path), nil
+}
+
+// newRecorder is newWriter for --dry-run: it writes nothing.
+func newRecorder(r herdrReader) (actions.Writer, *actions.Recorder) {
+	if _, ok := r.(*herdrcore.Client); ok {
+		rec := &actions.CoreRecorder{}
+		return rec, &rec.Recorder
+	}
+	rec := &actions.Recorder{}
+	return rec, rec
 }

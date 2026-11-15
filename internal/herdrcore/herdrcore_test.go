@@ -351,6 +351,43 @@ func TestSocketPath(t *testing.T) {
 	}
 }
 
+// fakeWindowFor is a Herdr window that records each request into got and
+// answers status with the focused pane *focus.
+func fakeWindowFor(t *testing.T, got *[]string) (string, *string) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "a.sock")
+	l, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close(); os.RemoveAll(dir) })
+	focus := new(string)
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			line, err := bufio.NewReader(conn).ReadString('\n')
+			if err == nil {
+				line = strings.TrimSpace(line)
+				if line == `{"status":true}` {
+					fmt.Fprintf(conn, `{"space":"s","tab":"t","focused_pane":%q}`+"\n", *focus)
+				} else {
+					*got = append(*got, line)
+					fmt.Fprintln(conn, `{"ok":true}`)
+				}
+			}
+			conn.Close()
+		}
+	}()
+	return path, focus
+}
+
 func TestHasLayout(t *testing.T) {
 	path, count := liveCore(t)
 	if ok, err := New(path).HasLayout(); !ok || err != nil {

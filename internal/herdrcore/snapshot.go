@@ -49,10 +49,53 @@ type layout struct {
 // node is one node of a tab's layout tree: a row or column of children, or
 // a block showing one thing.
 type node struct {
+	ID       string `json:"id"` // the pane id when this block shows a terminal
 	Children []node `json:"children"`
 	Content  *struct {
 		Terminal string `json:"terminal"`
 	} `json:"content"`
+}
+
+// find returns the first block under n, in layout order, that match accepts.
+func (n node) find(match func(node) bool) *node {
+	if n.Content != nil && n.Content.Terminal != "" && match(n) {
+		return &n
+	}
+	for _, c := range n.Children {
+		if f := c.find(match); f != nil {
+			return f
+		}
+	}
+	return nil
+}
+
+// find returns the first block in the layout, in sidebar order, that match
+// accepts.
+func (l layout) find(match func(node) bool) *node {
+	for _, sp := range l.Spaces {
+		for _, tab := range sp.Tabs {
+			if f := tab.Root.find(match); f != nil {
+				return f
+			}
+		}
+	}
+	return nil
+}
+
+// terminalAt is the terminal the pane shows, or "".
+func (l layout) terminalAt(pane string) string {
+	if f := l.find(func(n node) bool { return n.ID == pane }); f != nil {
+		return f.Content.Terminal
+	}
+	return ""
+}
+
+// paneOf is the first pane showing the terminal, or "".
+func (l layout) paneOf(terminal string) string {
+	if f := l.find(func(n node) bool { return n.Content.Terminal == terminal }); f != nil {
+		return f.ID
+	}
+	return ""
 }
 
 // terminals appends the terminals under n in layout order.
@@ -69,8 +112,9 @@ func (n node) terminals(out []string) []string {
 // Snapshot reads herdr-core's terminals and the app's layout and returns
 // them as a herdr.Snapshot. Agents come in the app's sidebar order: spaces,
 // then tabs, then each tab's terminals in layout order. A terminal the app
-// labels but hasn't placed yet goes after those. FocusedPaneID is always
-// nil: focus belongs to the app window, not to herdr-core.
+// labels but hasn't placed yet goes after those. Focus belongs to the app
+// window, not to herdr-core: FocusedPaneID is the terminal in the window's
+// focused pane when App is set and the window answers, else nil.
 func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	var list struct {
 		Terminals []terminal `json:"terminals"`
@@ -78,33 +122,43 @@ func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	if err := c.Call("terminal.list", nil, &list); err != nil {
 		return nil, err
 	}
+	l, err := c.layout()
+	if err != nil {
+		return nil, err
+	}
+	s := build(list.Terminals, l)
+	if c.App != nil {
+		// A closed window only means no focus; the lights still work.
+		if st, err := c.App.Status(); err == nil && st.Pane != "" {
+			if t := l.terminalAt(st.Pane); t != "" {
+				s.FocusedPaneID = &t
+			}
+		}
+	}
+	return s, nil
+}
+
+// layout reads the app's layout document; empty before the app first runs.
+func (c *Client) layout() (layout, error) {
 	var doc struct {
 		Value *layout `json:"value"` // null before the app first runs
 	}
 	if err := c.Call("doc.get", struct {
 		Name string `json:"name"`
 	}{LayoutDoc}, &doc); err != nil {
-		return nil, err
+		return layout{}, err
 	}
-	var l layout
-	if doc.Value != nil {
-		l = *doc.Value
+	if doc.Value == nil {
+		return layout{}, nil
 	}
-	return build(list.Terminals, l), nil
+	return *doc.Value, nil
 }
 
 // HasLayout reports whether the Herdr app has laid out any space, reading
 // only the layout document.
 func (c *Client) HasLayout() (bool, error) {
-	var doc struct {
-		Value *layout `json:"value"` // null before the app first runs
-	}
-	if err := c.Call("doc.get", struct {
-		Name string `json:"name"`
-	}{LayoutDoc}, &doc); err != nil {
-		return false, err
-	}
-	return doc.Value != nil && len(doc.Value.Spaces) > 0, nil
+	l, err := c.layout()
+	return len(l.Spaces) > 0, err
 }
 
 // build is Snapshot without the socket.

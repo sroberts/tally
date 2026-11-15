@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/daemon"
@@ -52,27 +53,32 @@ func serve(args []string) error {
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
 	webListen := fs.String("web-listen", fmt.Sprintf(":%d", web.Port), "address for --web")
-	backend := fs.String("herdr", backendTUI, herdrFlagHelp+" (actions don't run against core yet)")
+	backend := fs.String("herdr", backendAuto, herdrFlagHelp)
 	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (from Let's Encrypt via tailscale cert) or self (from tally's own CA; trust it with tally web --ca)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
-	path, reader, err := openHerdr(*backend)
-	if err != nil {
-		return err
-	}
 	level := slog.LevelInfo
 	if *verbose {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	log.Info("tally serve", "herdr", path, "backend", backendName(reader), "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
 	if *webCert != "tailscale" && *webCert != "self" {
 		return fmt.Errorf("--web-cert must be tailscale or self, not %q", *webCert)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// auto picks once: give a Herdr app still starting at login a chance.
+	path, reader, err := awaitHerdr(ctx, *backend, autoWait, 2*time.Second, log)
+	if ctx.Err() != nil {
+		return nil // stopped while waiting: a clean exit, as after serving
+	}
+	if err != nil {
+		return err
+	}
+	log.Info("tally serve", "herdr", path, "backend", backendName(reader), "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
 
 	var wg sync.WaitGroup
 	emit := func(slots.Frame) {}
@@ -107,9 +113,9 @@ func serve(args []string) error {
 
 	var srv *remote.Server
 	if *remoteOn || *webOn {
-		var writer actions.Writer = noActions{}
-		if _, ok := reader.(*herdr.Client); ok {
-			writer = herdr.NewWriter(path) // the only herdr Writer while tally serves
+		writer, err := newWriter(path, reader) // the only herdr writer while tally serves
+		if err != nil {
+			return err
 		}
 		if srv, err = newRemote(reader, writer, cfg.Slots, *listen, log); err != nil {
 			return err

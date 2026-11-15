@@ -79,7 +79,7 @@ Handy commands while working:
 ```bash
 tally status                         # herdr's agents in slot order (--herdr core|tui|auto)
 tally status --json | tally frame -  # light the pad from live herdr state, once
-tally act submit --dry-run           # print an action's herdr calls without making them
+tally act submit --dry-run           # print an action's herdr calls without making them (--herdr core|tui)
 tally serve --verbose                # log every frame and action
 ```
 
@@ -95,7 +95,7 @@ HOME=$scratch tally web --set-password --password-stdin <<< 'a scratch password'
 HOME=$scratch tally serve --web --web-cert self --no-device --web-listen 127.0.0.1:47899
 ```
 
-**Never send keys to live herdr panes** from tests or while developing: real agents run there. Test writes against the fake writer, `--dry-run`, or a scratch tab you create and close.
+**Never send keys to live herdr panes** from tests or while developing: real agents run there. Test writes against the fake writer, `--dry-run`, or a scratch tab you create and close. With herdr-core, a scratch terminal is `hc run --name tally-scratch --no-parent --rm --bg cat` (it carries no `herdr.space` label, so the app never shows it); close it with `hc kill tally-scratch`.
 
 ### Testing --web-cert self on iOS
 

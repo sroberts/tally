@@ -34,7 +34,7 @@ func (c *Client) SubscribeAll(ctx context.Context, notify func()) error {
 	if err := checkAllowed("events.subscribe"); err != nil {
 		return err
 	}
-	conn, err := dial(c.Path, "events.subscribe", nil)
+	conn, err := dial(c.Path, "events.subscribe", nil, Timeout)
 	if err != nil {
 		return err
 	}
