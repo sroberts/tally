@@ -7,7 +7,7 @@
 
 **[sroberts.github.io/tally](https://sroberts.github.io/tally/)**
 
-Running several Claude Code agents means constantly checking which one is waiting on you. tally puts your [herdr](https://herdr.dev) agents on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It runs in the background on the machine where herdr runs.
+Running several Claude Code agents means constantly checking which one is waiting on you. tally puts the agents you run in [Herdr](https://herdr.dev) on a control pad: see at a glance which agent needs you, then approve, interrupt or dictate to it without switching windows. It works with the Herdr desktop app and with the original herdr TUI, and runs in the background on the machine where Herdr runs.
 
 - **The browser pad** is the main way to use it: a pad on your phone's home screen, served by tally over HTTPS behind a password.
 - **[vibe-macropad](https://github.com/sroberts/vibe-macropad)**, an Adafruit MacroPad on your desk, is optional. Its keys light by the same states, and it can run alongside the browser pad.
@@ -16,7 +16,7 @@ Running several Claude Code agents means constantly checking which one is waitin
 
 ## Install
 
-You need [Go](https://go.dev/dl/) 1.27 or later and a running herdr. tally runs on macOS and Linux.
+You need [Go](https://go.dev/dl/) 1.27 or later and Herdr: the [Herdr app](https://herdr.dev) (`brew install --cask herdr-app`) or the original herdr TUI. tally runs on macOS and Linux.
 
 ```bash
 go install github.com/sroberts/tally@latest
@@ -44,11 +44,21 @@ This prints a generated password once and a QR code. Scan the code with your pho
 
 Using only the [hardware pad](#the-hardware-pad)? Plug it in and run `tally install-agent` without `--web`.
 
+### The Herdr app or the herdr TUI
+
+tally reads the Herdr app when it's running (through herdr-core, the server behind it) and the original herdr TUI otherwise. To pin one, pass `--herdr core` or `--herdr tui` to `tally install-agent`, `serve`, `status`, `act` and `doctor`. tally shows one Herdr at a time: the app and the TUI don't share agents.
+
+With the Herdr app:
+
+- The slots follow the app's sidebar: spaces, then tabs, then panes.
+- Focusing an agent, zoom, and new or resumed Claude tabs need the app's window open. Without it the lights and DRIVE keys still work, and the focused agent isn't marked.
+- **talk** doesn't type into agents yet: herdr-core can only paste text and press Enter together, and talk's text must wait for **enter**. Every other key works.
+
 ## The browser pad
 
 ### Set up Tailscale
 
-1. Install Tailscale on the machine running herdr and on your phone, signed in to the same tailnet.
+1. Install Tailscale on the machine running Herdr and on your phone, signed in to the same tailnet.
 2. In the [admin console](https://login.tailscale.com/admin/dns), turn on **MagicDNS** and **HTTPS certificates**.
 3. On Linux, also run `sudo tailscale set --operator=$USER` so tally can fetch its certificate without root.
 
@@ -108,8 +118,8 @@ If you never use the hardware pad, `--no-device` stops tally looking for it.
 | --- | --- |
 | `tally install-agent [--web]` | Run tally in the background, now and at login |
 | `tally uninstall-agent` | Stop and remove the background agent |
-| `tally doctor` | Check herdr, the background agent, the browser pad and the hardware pad |
-| `tally status` | List herdr's agents in slot order |
+| `tally doctor` | Check Herdr (the app's window too), the background agent, the browser pad and the hardware pad |
+| `tally status` | List Herdr's agents in slot order |
 | `tally web` | Show a sign-in QR code for the browser pad |
 | `tally web --ca` | Write tally's certificate authority to trust, for `--web-cert self` |
 | `tally serve [--web]` | Run tally in this terminal instead of the background |
@@ -130,6 +140,8 @@ Each agent is in one of five states. The pads share one palette, where amber alw
 | **Unknown** (`U`) | herdr can't tell yet | Dimmer gray tile | Gray `·`, "idle" | Faint white key |
 
 An empty slot shows `—` on the browser pad and an unlit key on the hardware pad. The focused agent's tile has a white outline, and the others sit at 60%. DRIVE keys light by the focused agent's state, so the keys that matter right now stand out. When the link to tally drops, the tiles dim and the header says why.
+
+With the Herdr app, an agent's state comes from the app's own rule: a permission prompt, question or error is **Needs you**, and a finished turn stays **Done** until you look at it in the app. It is never **Unknown**: a terminal that hasn't reported a state isn't counted as an agent.
 
 `tally status` and the protocol docs use the one-letter codes.
 

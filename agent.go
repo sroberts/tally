@@ -58,6 +58,7 @@ type agentOptions struct {
 	web       bool
 	webListen string
 	webCert   string
+	herdr     string
 }
 
 func installAgent(args []string) error {
@@ -71,8 +72,14 @@ func installAgent(args []string) error {
 	fs.BoolVar(&o.web, "web", false, "also serve the browser pad (tally serve --web)")
 	fs.StringVar(&o.webListen, "web-listen", "", "address for --web (default :47825)")
 	fs.StringVar(&o.webCert, "web-cert", "", "certificate for --web: tailscale (default) or self")
+	fs.StringVar(&o.herdr, "herdr", "", herdrFlagHelp+" (default auto)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
+	switch o.herdr {
+	case "", backendAuto, backendCore, backendTUI:
+	default:
+		return fmt.Errorf("--herdr %q: want core, tui or auto", o.herdr)
+	}
 
 	program, err := executable()
 	if err != nil {
@@ -123,6 +130,9 @@ func (o agentOptions) serveArgs() []string {
 	if o.noDevice {
 		args = append(args, "--no-device")
 	}
+	if o.herdr != "" && o.herdr != backendAuto {
+		args = append(args, "--herdr", o.herdr)
+	}
 	return args
 }
 
@@ -139,10 +149,11 @@ func (o agentOptions) serving() web.Serving {
 }
 
 // agentEnv is the environment the agent keeps: the service manager doesn't
-// see the shell's, so carry over the herdr session.
+// see the shell's, so carry over which herdr-core session, Herdr window and
+// herdr TUI session to use.
 func agentEnv(getenv func(string) string) map[string]string {
 	env := map[string]string{}
-	for _, k := range []string{"HERDR_SOCKET_PATH", "HERDR_SESSION"} {
+	for _, k := range []string{"HC_SOCKET", "HC_SESSION", "HERDR_APP_HOME", "HERDR_SOCKET_PATH", "HERDR_SESSION"} {
 		if v := getenv(k); v != "" {
 			env[k] = v
 		}

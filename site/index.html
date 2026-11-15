@@ -6,7 +6,7 @@
 <title>tally · a control pad for Claude Code agents</title>
 <meta name="description" content="See which Claude Code agent needs you, then approve, interrupt or dictate to it from your phone, without switching windows.">
 <meta property="og:title" content="tally">
-<meta property="og:description" content="A phone and hardware control pad for your Claude Code agents in herdr.">
+<meta property="og:description" content="A phone and hardware control pad for your Claude Code agents in Herdr.">
 <meta property="og:image" content="https://sroberts.github.io/tally/social-preview.png">
 <meta property="og:url" content="https://sroberts.github.io/tally/">
 <meta name="twitter:card" content="summary_large_image">
@@ -31,7 +31,7 @@
   <div class="hero-text">
     <p class="label">control pad for claude code agents</p>
     <h1>see which agent<br>needs <em>you</em>.</h1>
-    <p class="lede">Running several Claude Code agents means constantly checking which one is waiting on you. tally puts your <a href="https://herdr.dev">herdr</a> agents on a pad on your phone: one glance shows who's blocked, and one tap approves, interrupts or dictates to them, without switching windows.</p>
+    <p class="lede">Running several Claude Code agents means constantly checking which one is waiting on you. tally puts the agents you run in <a href="https://herdr.dev">Herdr</a>, the app or the TUI, on a pad on your phone: one glance shows who's blocked, and one tap approves, interrupts or dictates to them, without switching windows.</p>
     <div class="cmd" data-copy="go install github.com/sroberts/tally@latest">
       <code><span class="prompt">$</span> go install github.com/sroberts/tally@latest</code>
       <button type="button" aria-label="copy the install command">copy</button>
@@ -48,7 +48,7 @@
   <div class="grid three">
     <div class="cell">
       <h3>see</h3>
-      <p>Six tiles mirror herdr's agent sidebar. An agent that needs you pulses amber with how long it has waited; <b>attn</b> jumps to whoever has waited longest.</p>
+      <p>Six tiles mirror Herdr's agent sidebar. An agent that needs you pulses amber with how long it has waited; <b>attn</b> jumps to whoever has waited longest.</p>
     </div>
     <div class="cell">
       <h3>act</h3>
@@ -59,7 +59,7 @@
       <p>Type or dictate a prompt with your phone's keyboard mic and it lands in the agent you're looking at. Press <b>enter</b> on the pad to send it.</p>
     </div>
   </div>
-  <p class="note">tally runs in the background next to herdr and acts on agents through herdr's socket, not by faking keystrokes, so it works while your editor or browser has focus. It works the same on macOS and Linux.</p>
+  <p class="note">tally runs in the background next to Herdr and acts on agents through Herdr's own interfaces, not by faking keystrokes, so it works while your editor or browser has focus. It works the same on macOS and Linux.</p>
 </section>
 
 <section class="module">
@@ -78,12 +78,12 @@
   <ol class="steps">
     <li>
       <h3>install tally</h3>
-      <p>Needs <a href="https://go.dev/dl/">Go</a> 1.27+ and a running <a href="https://herdr.dev">herdr</a>. Or grab a binary for macOS or Linux from <a href="https://github.com/sroberts/tally/releases/latest">releases</a>.</p>
+      <p>Needs <a href="https://go.dev/dl/">Go</a> 1.27+ and <a href="https://herdr.dev">Herdr</a>: the app or the herdr TUI. Or grab a binary for macOS or Linux from <a href="https://github.com/sroberts/tally/releases/latest">releases</a>.</p>
       <div class="cmd" data-copy="go install github.com/sroberts/tally@latest"><code><span class="prompt">$</span> go install github.com/sroberts/tally@latest</code><button type="button" aria-label="copy">copy</button></div>
     </li>
     <li>
       <h3>set up tailscale</h3>
-      <p>Put <a href="https://tailscale.com">Tailscale</a> on the machine running herdr and on your phone. In the admin console, turn on <b>MagicDNS</b> and <b>HTTPS certificates</b>. tally fetches and renews its certificate itself.</p>
+      <p>Put <a href="https://tailscale.com">Tailscale</a> on the machine running Herdr and on your phone. In the admin console, turn on <b>MagicDNS</b> and <b>HTTPS certificates</b>. tally fetches and renews its certificate itself.</p>
     </li>
     <li>
       <h3>start it</h3>
@@ -95,7 +95,7 @@
       <p>Scan the code with your phone's camera to open the pad already signed in, then add it to your home screen when it offers. It runs full screen and stays signed in.</p>
     </li>
   </ol>
-  <p class="note">Something off? <code>tally doctor</code> checks herdr, the background agent, the certificate and the pad. The full guide is in the <a href="https://github.com/sroberts/tally#readme">README</a>.</p>
+  <p class="note">Something off? <code>tally doctor</code> checks Herdr, the background agent, the certificate and the pad. The full guide is in the <a href="https://github.com/sroberts/tally#readme">README</a>.</p>
 </section>
 
 <section class="module">
@@ -103,7 +103,7 @@
   <div class="grid two">
     <ul class="ticks">
       <li>Your agents' titles, paths and terminal output never leave your machine. The pad sees only each agent's state.</li>
-      <li>Keys reach agent panes only, through a fixed allowlist of herdr calls. Nothing is ever retried.</li>
+      <li>Keys reach agent panes only, through a fixed allowlist of Herdr calls. Nothing is ever retried.</li>
     </ul>
     <ul class="ticks">
       <li>HTTPS only, always behind a password (argon2id). Single-use QR sign-in codes; the password never goes in a URL.</li>

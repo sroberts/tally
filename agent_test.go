@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/sroberts/tally/internal/pairing"
+	"github.com/sroberts/tally/internal/slots"
 	"github.com/sroberts/tally/internal/web"
 )
 
@@ -77,5 +78,20 @@ func TestListenPorts(t *testing.T) {
 	}
 	if remotePort(pairing.State{}) != 47824 || remotePort(pairing.State{Listen: ":48000"}) != 48000 {
 		t.Error("remotePort")
+	}
+}
+
+func TestAgentCarriesHerdrCoreAndWindow(t *testing.T) {
+	env := map[string]string{"HC_SOCKET": "/tmp/c.sock", "HC_SESSION": "work", "HERDR_APP_HOME": "/tmp/app", "XDG_RUNTIME_DIR": "/run/user/1"}
+	got := agentEnv(func(k string) string { return env[k] })
+	want := map[string]string{"HC_SOCKET": "/tmp/c.sock", "HC_SESSION": "work", "HERDR_APP_HOME": "/tmp/app"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("env %v", got)
+	}
+	if args := (agentOptions{slots: slots.DefaultSlots, herdr: "auto"}).serveArgs(); len(args) != 0 {
+		t.Errorf("auto: %q", args)
+	}
+	if args := (agentOptions{slots: slots.DefaultSlots, herdr: "tui"}).serveArgs(); !reflect.DeepEqual(args, []string{"--herdr", "tui"}) {
+		t.Errorf("tui: %q", args)
 	}
 }
