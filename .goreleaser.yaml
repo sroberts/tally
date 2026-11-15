@@ -28,10 +28,11 @@ checksum:
 sboms:
   - artifacts: archive
 
+# GitHub writes the notes, one line per merged PR, grouped by
+# .github/release.yml: the same as the release page's "Generate release
+# notes". GoReleaser's own changelog listed every commit instead.
 changelog:
-  use: github
-  filters:
-    exclude: ["^Merge pull request"]
+  use: github-native
 
 release:
   # Published by the release workflow once the provenance attestation exists.
