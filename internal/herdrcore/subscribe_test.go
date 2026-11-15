@@ -55,6 +55,9 @@ func TestSubscribeAllNotifiesOnEventsNotHeartbeats(t *testing.T) {
 		fmt.Fprintln(conn, ack)
 		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"heartbeat","params":{}}`)
 		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"event","params":{"seq":8,"type":"title","terminal":"t1","data":{"title":"SECRET"}}}`)
+		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"event","params":{"seq":9,"type":"size","terminal":"t1","data":{}}}`)
+		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"event","params":{"seq":10,"type":"status","terminal":"t1","data":{"msg":"SECRET"}}}`)
+		fmt.Fprintln(conn, `{"jsonrpc":"2.0","id":1,"result":{},"error":null}`)
 		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"heartbeat","params":{}}`)
 		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"missed","params":{"seq":20,"terminals":[]}}`)
 		fmt.Fprintln(conn, `{"jsonrpc":"2.0","method":"something.new","params":{}}`)
@@ -65,14 +68,15 @@ func TestSubscribeAllNotifiesOnEventsNotHeartbeats(t *testing.T) {
 	ended := make(chan error, 1)
 	go func() { ended <- New(path).SubscribeAll(ctx, func() { n.Add(1) }) }()
 
-	// ack + event + missed + the unknown notification; no heartbeats.
+	// ack, status, the null-error line, missed and the unknown
+	// notification; no heartbeats, title or size.
 	deadline := time.Now().Add(2 * time.Second)
-	for n.Load() < 4 && time.Now().Before(deadline) {
+	for n.Load() < 5 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	time.Sleep(50 * time.Millisecond)
-	if got := n.Load(); got != 4 {
-		t.Errorf("notified %d times, want 4", got)
+	if got := n.Load(); got != 5 {
+		t.Errorf("notified %d times, want 5", got)
 	}
 	cancel()
 	if err := <-ended; !errors.Is(err, context.Canceled) {
@@ -133,5 +137,39 @@ func TestSubscribeAllOffline(t *testing.T) {
 	var off *herdr.OfflineError
 	if !errors.As(err, &off) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestChanges(t *testing.T) {
+	for _, c := range []struct {
+		method, kind string
+		want         bool
+	}{
+		{"heartbeat", "", false},
+		{"event", "title", false},
+		{"event", "size", false},
+		{"event", "keep", false},
+		{"event", "status", true},
+		{"event", "turn", true},
+		{"event", "labels", true},
+		{"event", "doc", true},
+		{"event", "created", true},
+		{"event", "something-new", true},
+		{"missed", "", true},
+		{"other", "", true},
+	} {
+		if got := changes(c.method, c.kind); got != c.want {
+			t.Errorf("%s %s: %v, want %v", c.method, c.kind, got, c.want)
+		}
+	}
+}
+
+func TestSubscribeAllNeverReturnsNilOnAnErrorLine(t *testing.T) {
+	path := streamCore(t, func(conn net.Conn, _ string) {
+		fmt.Fprintln(conn, ack)
+		fmt.Fprintln(conn, `{"jsonrpc":"2.0","id":null,"error":{}}`)
+	})
+	if err := New(path).SubscribeAll(context.Background(), func() {}); err == nil {
+		t.Fatal("nil error")
 	}
 }

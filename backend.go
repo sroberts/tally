@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/herdr"
@@ -26,33 +29,71 @@ const (
 const herdrFlagHelp = "which herdr to read: core (the Herdr app), tui (the original herdr), or auto"
 
 // openHerdr returns the socket path and a read-only client for the chosen
-// herdr. auto picks herdr-core when its socket answers and falls back to the
-// herdr TUI, so a user who hasn't moved to the app keeps working.
+// herdr. auto picks between them with pickAuto, so a user who hasn't moved
+// to the app keeps working.
 func openHerdr(choice string) (string, herdrReader, error) {
+	path, r, _, err := resolveHerdr(choice)
+	return path, r, err
+}
+
+// resolveHerdr is openHerdr that also says whether, for auto, the herdr it
+// picked answered.
+func resolveHerdr(choice string) (string, herdrReader, bool, error) {
 	switch choice {
-	case backendCore, backendAuto:
-		path, err := herdrcore.SocketPath()
-		if err != nil {
-			return "", nil, err
-		}
-		app, err := herdrapp.SocketPath()
-		if err != nil {
-			return "", nil, err
-		}
-		c := herdrcore.New(path)
-		c.App = &herdrapp.Viewer{Path: app} // for focus
-		if choice == backendCore || c.Ping() == nil {
-			return path, c, nil
-		}
-		fallthrough
+	case backendCore:
+		path, c, err := openCore()
+		return path, c, false, err
 	case backendTUI:
-		path, err := herdr.SocketPath()
-		if err != nil {
-			return "", nil, err
+		path, c, err := openTUI()
+		return path, c, false, err
+	case backendAuto:
+		cpath, core, cerr := openCore()
+		tpath, tui, terr := openTUI()
+		coreUp, layout := false, false
+		if cerr == nil && core.Ping() == nil {
+			coreUp = true
+			if snap, err := core.Snapshot(); err == nil {
+				layout = len(snap.Workspaces) > 0
+			}
 		}
-		return path, herdr.New(path), nil
+		tuiUp := terr == nil && tui.Ping() == nil
+		switch {
+		case pickAuto(coreUp, layout, tuiUp) == backendCore && cerr == nil:
+			return cpath, core, coreUp, nil
+		case terr == nil:
+			return tpath, tui, tuiUp, nil
+		case cerr == nil:
+			return cpath, core, coreUp, nil
+		}
+		return "", nil, false, terr
 	}
-	return "", nil, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
+	return "", nil, false, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
+}
+
+// autoWait bounds how long tally serve --herdr auto waits at start for
+// either herdr to answer, so a login start before the Herdr app doesn't
+// settle on the wrong one for the life of the process.
+const autoWait = time.Minute
+
+// awaitHerdr is openHerdr for tally serve. auto picks once, at start; while
+// neither herdr answers it keeps asking for up to wait, then settles for the
+// fallback and lets the daemon report herdr offline.
+func awaitHerdr(ctx context.Context, choice string, wait, every time.Duration, log *slog.Logger) (string, herdrReader, error) {
+	deadline := time.Now().Add(wait)
+	for logged := false; ; logged = true {
+		path, r, up, err := resolveHerdr(choice)
+		if err != nil || up || choice != backendAuto || !time.Now().Before(deadline) {
+			return path, r, err
+		}
+		if !logged {
+			log.Info("waiting for herdr-core or the herdr TUI to answer", "for", wait)
+		}
+		select {
+		case <-ctx.Done():
+			return path, r, ctx.Err()
+		case <-time.After(every):
+		}
+	}
 }
 
 // backendName names the herdr a reader talks to, for logs.
@@ -63,11 +104,54 @@ func backendName(r herdrReader) string {
 	return backendTUI
 }
 
+// pickAuto is --herdr auto's choice. herdr-core wins when it answers and the
+// Herdr app has laid out its sidebar. A herdr-core without a layout (hc
+// running, the app never opened) has no agents to show, so a herdr TUI that
+// answers wins over it. With neither answering, the TUI is the fallback, as
+// it was before herdr-core.
+func pickAuto(coreUp, coreLayout, tuiUp bool) string {
+	switch {
+	case coreUp && coreLayout:
+		return backendCore
+	case tuiUp:
+		return backendTUI
+	case coreUp:
+		return backendCore
+	}
+	return backendTUI
+}
+
+// openCore returns a herdr-core client that asks the Herdr window for
+// focus. Without a window socket path it reads herdr-core alone.
+func openCore() (string, *herdrcore.Client, error) {
+	path, err := herdrcore.SocketPath()
+	if err != nil {
+		return "", nil, err
+	}
+	c := herdrcore.New(path)
+	if app, err := herdrapp.SocketPath(); err == nil {
+		c.App = &herdrapp.Viewer{Path: app}
+	}
+	return path, c, nil
+}
+
+func openTUI() (string, *herdr.Client, error) {
+	path, err := herdr.SocketPath()
+	if err != nil {
+		return "", nil, err
+	}
+	return path, herdr.New(path), nil
+}
+
 // newWriter makes the one herdr writer for the reader's herdr. Only tally
 // serve --remote/--web and tally act call it.
 func newWriter(path string, r herdrReader) (actions.Writer, error) {
 	if c, ok := r.(*herdrcore.Client); ok {
-		return herdrcore.NewWriter(path, c.App.Path), nil
+		app := ""
+		if c.App != nil {
+			app = c.App.Path
+		}
+		return herdrcore.NewWriter(path, app), nil
 	}
 	return herdr.NewWriter(path), nil
 }

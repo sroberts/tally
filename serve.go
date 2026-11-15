@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/daemon"
@@ -57,22 +58,24 @@ func serve(args []string) error {
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
-	path, reader, err := openHerdr(*backend)
-	if err != nil {
-		return err
-	}
 	level := slog.LevelInfo
 	if *verbose {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	log.Info("tally serve", "herdr", path, "backend", backendName(reader), "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
 	if *webCert != "tailscale" && *webCert != "self" {
 		return fmt.Errorf("--web-cert must be tailscale or self, not %q", *webCert)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// auto picks once: give a Herdr app still starting at login a chance.
+	path, reader, err := awaitHerdr(ctx, *backend, autoWait, 2*time.Second, log)
+	if err != nil {
+		return err
+	}
+	log.Info("tally serve", "herdr", path, "backend", backendName(reader), "slots", cfg.Slots, "remote", *remoteOn, "web", *webOn, "device", !*noDevice)
 
 	var wg sync.WaitGroup
 	emit := func(slots.Frame) {}
@@ -101,6 +104,8 @@ func serve(args []string) error {
 		d = daemon.NewStream(cfg, r, emit, log)
 	case *herdr.Client:
 		d = daemon.New(cfg, r, emit, log)
+	default:
+		return fmt.Errorf("no daemon for %T", reader)
 	}
 
 	var srv *remote.Server
