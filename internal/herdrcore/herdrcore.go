@@ -37,7 +37,8 @@ const maxLine = 16 << 20
 var allowed = map[string]bool{
 	"hello":            true,
 	"terminal.list":    true,
-	"doc.get":          true,
+	"doc.get":          true, // this core's and connected machines' (on) layouts
+	"machine.list":     true, // which machines are connected
 	"events.subscribe": true,
 }
 

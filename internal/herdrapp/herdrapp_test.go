@@ -168,3 +168,27 @@ func TestOversizedReply(t *testing.T) {
 		t.Fatal("a reply past maxReply was accepted")
 	}
 }
+
+func TestSpacesPrefixesConnectedMachines(t *testing.T) {
+	path, got := fakeWindow(t, func(string) string {
+		return `{"spaces":[{"id":"mm/sp1","name":"SECRET","folder":"SECRET","machine":"mm","active":true,"tabs":[]},{"id":"L","machine":null},{"id":"sp2","machine":"mm"}],"recent":[]}`
+	})
+	ids, err := (&Viewer{Path: path}).Spaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"mm/sp1", "L", "mm/sp2"}; strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Errorf("ids = %q", ids)
+	}
+	if g := got(); len(g) != 1 || g[0] != `{"ls":true}` {
+		t.Errorf("requests = %q", g)
+	}
+}
+
+func TestSocketPathFollowsXDGConfigHome(t *testing.T) {
+	t.Setenv("HERDR_APP_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "/cfg")
+	if p, _ := SocketPath(); p != "/cfg/herdr-app/herdr-app.sock" {
+		t.Errorf("xdg: %s", p)
+	}
+}

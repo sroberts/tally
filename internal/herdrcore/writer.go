@@ -77,7 +77,7 @@ func (w *Writer) Focus(terminal string) error { return w.App.FocusAgent(terminal
 // focused pane when it shows it, else the first pane that does in layout
 // order.
 func (w *Writer) Zoom(terminal string) error {
-	l, err := w.read.layout()
+	l, _, err := w.read.world()
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,10 @@ func (w *Writer) Pane(terminal string) (herdr.PaneInfo, error) {
 	if t.Foreground != nil && t.Foreground.Cwd != "" {
 		cwd = t.Foreground.Cwd
 	}
-	return herdr.PaneInfo{PaneID: terminal, WorkspaceID: t.Labels.Space, Cwd: &cwd}, nil
+	// The label names the space on the terminal's machine; the window wants
+	// it as it shows it (mm/sp1 for a connected machine's).
+	space := prefixed(machineOf(terminal), t.Labels.Space)
+	return herdr.PaneInfo{PaneID: terminal, WorkspaceID: space, Cwd: &cwd}, nil
 }
 
 // OpenTab opens a shown tab in space running cmd in cwd.

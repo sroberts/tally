@@ -27,6 +27,18 @@ Both backends produce the same `herdr.Snapshot` and drive the same `actions.Writ
 
 Only ids, states, turns and the `herdr.space`, `herdr.tab` and `herdr.seen` labels are declared. Cwd, argv, title, screen, terminal names, other labels, space folders, tab names and the status message are dropped while decoding; `testdata/core/` holds scrubbed captures with `SECRET-` canaries that the decoder test checks.
 
+## Connected machines
+
+The Herdr app can show other machines' spaces: its computer's herdr-core adds them as machines (`hc machine add`), and their terminals are listed as `machine/t7`. tally runs where the app runs and sees what the window shows:
+
+- **Agents.** `terminal.list` lists this core's terminals and then each connected machine's. A `machine/t7` terminal counts when its machine is `connected` in the same reply's `machines`. Terminals on an unreachable machine don't count.
+- **Layout.** Each machine keeps its own `herdr-app` document. tally reads this core's, then each connected machine's with `doc.get {on: machine}`, and prefixes that machine's space, tab and pane ids and terminals with `machine/`, the way the app names them. A machine whose document can't be read is left out. A terminal's `herdr.space`/`herdr.tab` labels name ids on its own machine and get the same prefix.
+- **Order.** Without the window, it's this core's spaces and then each connected machine's, in herdr-core's machine order. With the window open, the spaces follow its sidebar (`{"ls":true}`, reading only each space's id and `machine`). The order is asked for only after the window has answered `status`, so a hung window costs one short timeout.
+- **Writing.** Keys go to `terminal.keys` with the prefixed address, and herdr-core relays them. The window takes prefixed ids for `agent.focus`, `pane.zoom` and `tab.new`'s space. `terminal.get` reports the space unprefixed, so NEW/RESUME prefix it.
+- **Picking a backend.** `HasLayout`, which `--herdr auto` uses, counts a connected machine's layout when this core has none, so a laptop whose spaces all live on another machine still picks herdr-core.
+
+The window's own computer is the only place its socket can be reached, so tally running on another machine (where the agents run, say) reads and drives those agents but can't move the window.
+
 ## Events
 
 herdr-core has a single `events.subscribe` stream for every terminal and document change, so `daemon.NewStream` holds one subscription where the TUI needs a lifecycle subscription plus one per agent pane. `SubscribeAll` notifies on the answer, which is a snapshot of every terminal, screens included, that it reads past with the same 45 s it allows any line. It also notifies on every notification that may change a frame: not `heartbeat`, and not `title`, `size` or `keep` events, since each snapshot reads every screen. Nothing past the method name, event kind and any error is decoded, since events carry titles and labels. An `"error": null` field isn't an error. A `missed` notice is followed by a fresh snapshot on the same stream and needs only a notify. 45 s without a line (herdr-core sends a heartbeat every 15 s) ends the subscription, and the daemon resubscribes.
