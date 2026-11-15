@@ -53,3 +53,42 @@ func (r *Recorder) CreateTab(workspace, cwd string) (string, error) {
 func (r *Recorder) Run(pane string, cmd herdr.Command) error {
 	return r.add("pane.send_input %s %q enter", pane, cmd.String())
 }
+
+// CoreRecorder is Recorder for herdr-core and the Herdr window: it lists the
+// calls a herdr-core Writer would make, with the same placeholders.
+type CoreRecorder struct {
+	Recorder
+}
+
+// SendKeys records terminal.keys.
+func (r *CoreRecorder) SendKeys(t string, keys ...string) error {
+	return r.add("terminal.keys %s %s", t, strings.Join(keys, " "))
+}
+
+// SendText records nothing: herdr-core refuses to type without Enter.
+func (r *CoreRecorder) SendText(string, string) error {
+	return &Error{Code: HerdrError, Message: "herdr-core can't type text without pressing Enter"}
+}
+
+// Submit records terminal.send.
+func (r *CoreRecorder) Submit(t, text string) error { return r.add("terminal.send %s %q", t, text) }
+
+// Focus records the window's agent.focus.
+func (r *CoreRecorder) Focus(t string) error { return r.add("window agent.focus %s", t) }
+
+// Zoom records the window's pane.zoom.
+func (r *CoreRecorder) Zoom(t string) error {
+	return r.add("window pane.zoom <pane showing %s>", t)
+}
+
+// Pane records terminal.get and answers with a placeholder space and cwd.
+func (r *CoreRecorder) Pane(t string) (herdr.PaneInfo, error) {
+	cwd := "<cwd>"
+	r.add("terminal.get %s", t)
+	return herdr.PaneInfo{PaneID: t, WorkspaceID: "<space>", Cwd: &cwd}, nil
+}
+
+// OpenTab records the window's tab.new.
+func (r *CoreRecorder) OpenTab(space, cwd string, cmd herdr.Command) error {
+	return r.add("window tab.new space=%s folder=%s argv=%q focus", space, cwd, cmd.Argv())
+}

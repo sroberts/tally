@@ -28,3 +28,23 @@ func TestOpenHerdr(t *testing.T) {
 		t.Error("unknown choice accepted")
 	}
 }
+
+func TestNewWriterMatchesTheReader(t *testing.T) {
+	t.Setenv("HC_SOCKET", "/tmp/no-such-herdr-core.sock")
+	t.Setenv("HERDR_SOCKET_PATH", "/tmp/no-such-herdr.sock")
+	t.Setenv("HERDR_APP_HOME", "/tmp/no-such-app")
+	path, r, _ := openHerdr(backendCore)
+	if c := r.(*herdrcore.Client); c.App == nil || c.App.Path != "/tmp/no-such-app/herdr-app.sock" {
+		t.Errorf("core reader's window = %+v", c.App)
+	}
+	if w, _ := newWriter(path, r); w.(*herdrcore.Writer).App.Path != "/tmp/no-such-app/herdr-app.sock" {
+		t.Errorf("core writer = %+v", w)
+	}
+	if _, rec := newRecorder(r); rec == nil {
+		t.Error("no recorder")
+	}
+	path, r, _ = openHerdr(backendTUI)
+	if w, _ := newWriter(path, r); w.(*herdr.Writer).Path != "/tmp/no-such-herdr.sock" {
+		t.Errorf("tui writer = %+v", w)
+	}
+}

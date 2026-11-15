@@ -1,6 +1,9 @@
 package herdr
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // writeAllowed lists every method a Writer may call. It exists only while
 // tally serve --remote (or tally act) runs; the read-only Client never sees
@@ -28,6 +31,10 @@ var (
 )
 
 func (c Command) String() string { return c.line }
+
+// Argv is the command split into words, for herdrs that start a program
+// rather than type its line.
+func (c Command) Argv() []string { return strings.Fields(c.line) }
 
 // PaneInfo is the part of pane.get that NEW and RESUME need. Titles are not
 // declared, so they are dropped while decoding.

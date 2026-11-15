@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/herdrapp"
 )
 
 // Timeout bounds a whole request/response exchange.
@@ -81,6 +82,9 @@ func dirExists(path string) bool {
 // core restart never leaves tally holding a dead connection.
 type Client struct {
 	Path string
+	// App, when set, is the Herdr window Snapshot asks for focus. It can
+	// only read the window's status.
+	App *herdrapp.Viewer
 }
 
 // New returns a client for the socket at path.
@@ -96,11 +100,11 @@ func (c *Client) Call(method string, params any, out any) error {
 	if !allowed[method] {
 		return fmt.Errorf("herdr-core: method %q is not on Tally's read-only allowlist", method)
 	}
-	return call(c.Path, method, params, out)
+	return call(c.Path, method, params, out, Timeout)
 }
 
-func call(path, method string, params any, out any) error {
-	conn, err := dial(path, method, params)
+func call(path, method string, params any, out any, timeout time.Duration) error {
+	conn, err := dial(path, method, params, timeout)
 	if err != nil {
 		return err
 	}
@@ -117,9 +121,9 @@ func call(path, method string, params any, out any) error {
 }
 
 // dial connects to herdr-core at path and writes one request. The
-// connection's deadline is Timeout from now. Callers check their allowlist
+// connection's deadline is timeout from now. Callers check their allowlist
 // first.
-func dial(path, method string, params any) (net.Conn, error) {
+func dial(path, method string, params any, timeout time.Duration) (net.Conn, error) {
 	if params == nil {
 		params = struct{}{}
 	}
@@ -136,7 +140,7 @@ func dial(path, method string, params any) (net.Conn, error) {
 	if err != nil {
 		return nil, &herdr.OfflineError{Path: path, Err: err}
 	}
-	conn.SetDeadline(time.Now().Add(Timeout))
+	conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
 		conn.Close()
 		return nil, &herdr.OfflineError{Path: path, Err: err}

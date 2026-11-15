@@ -75,6 +75,18 @@ type Writer interface {
 	Run(pane string, cmd herdr.Command) error
 }
 
+// Opener is a Writer that opens a tab with its program in one step, as
+// herdr-core's does. open uses it in place of CreateTab and Run.
+type Opener interface {
+	OpenTab(workspace, cwd string, cmd herdr.Command) error
+}
+
+// Submitter is a Writer that pastes text and presses Enter in one step, as
+// herdr-core's does. compact uses it in place of SendText and SendKeys.
+type Submitter interface {
+	Submit(pane, text string) error
+}
+
 // Request is one action from a client.
 type Request struct {
 	Name   string
@@ -125,6 +137,9 @@ var drive = map[string]step{
 		return t.W.SendKeys(pane, "esc")
 	},
 	"compact": func(t *Table, pane string, _ Request) error {
+		if s, ok := t.W.(Submitter); ok {
+			return s.Submit(pane, "/compact")
+		}
 		if err := t.W.SendText(pane, "/compact"); err != nil {
 			return err
 		}
@@ -309,15 +324,26 @@ func (t *Table) open(s *herdr.Snapshot, cmd herdr.Command) error {
 			cwd = *info.Cwd
 		}
 	}
+	if o, ok := t.W.(Opener); ok {
+		return scrubOpen(o.OpenTab(workspace, cwd, cmd))
+	}
 	pane, err := t.W.CreateTab(workspace, cwd)
 	if err != nil {
-		// herdr's message may quote the cwd; keep only the code.
-		if e, ok := herdrErr(err).(*Error); ok && e.Code != HerdrOffline {
-			return &Error{Code: e.Code, Message: "tab.create failed", Err: e.Err} // Err is never herdr's text
-		}
-		return err
+		return scrubOpen(err)
 	}
 	return t.W.Run(pane, cmd)
+}
+
+// scrubOpen keeps only the code of a failure to open a tab: herdr's message
+// may quote the cwd.
+func scrubOpen(err error) error {
+	if err == nil {
+		return nil
+	}
+	if e, ok := herdrErr(err).(*Error); ok && e.Code != HerdrOffline {
+		return &Error{Code: e.Code, Message: "tab.create failed", Err: e.Err} // Err is never herdr's text
+	}
+	return err
 }
 
 // cleanText checks insert_text's length and turns control characters,

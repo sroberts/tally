@@ -1,10 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/sroberts/tally/internal/actions"
 	"github.com/sroberts/tally/internal/herdr"
+	"github.com/sroberts/tally/internal/herdrapp"
 	"github.com/sroberts/tally/internal/herdrcore"
 )
 
@@ -34,7 +35,12 @@ func openHerdr(choice string) (string, herdrReader, error) {
 		if err != nil {
 			return "", nil, err
 		}
+		app, err := herdrapp.SocketPath()
+		if err != nil {
+			return "", nil, err
+		}
 		c := herdrcore.New(path)
+		c.App = &herdrapp.Viewer{Path: app} // for focus
 		if choice == backendCore || c.Ping() == nil {
 			return path, c, nil
 		}
@@ -57,20 +63,21 @@ func backendName(r herdrReader) string {
 	return backendTUI
 }
 
-// errNoCoreActions is every action's answer against herdr-core until its
-// writers land: refusing is better than writing to the TUI's socket.
-var errNoCoreActions = errors.New("actions don't run against herdr-core yet; use --herdr tui")
-
-// noActions is the remote listener's writer against herdr-core for now. It
-// refuses every call.
-type noActions struct{}
-
-func (noActions) SendKeys(string, ...string) error { return errNoCoreActions }
-func (noActions) SendText(string, string) error    { return errNoCoreActions }
-func (noActions) Focus(string) error               { return errNoCoreActions }
-func (noActions) Zoom(string) error                { return errNoCoreActions }
-func (noActions) Pane(string) (herdr.PaneInfo, error) {
-	return herdr.PaneInfo{}, errNoCoreActions
+// newWriter makes the one herdr writer for the reader's herdr. Only tally
+// serve --remote/--web and tally act call it.
+func newWriter(path string, r herdrReader) (actions.Writer, error) {
+	if c, ok := r.(*herdrcore.Client); ok {
+		return herdrcore.NewWriter(path, c.App.Path), nil
+	}
+	return herdr.NewWriter(path), nil
 }
-func (noActions) CreateTab(string, string) (string, error) { return "", errNoCoreActions }
-func (noActions) Run(string, herdr.Command) error          { return errNoCoreActions }
+
+// newRecorder is newWriter for --dry-run: it writes nothing.
+func newRecorder(r herdrReader) (actions.Writer, *actions.Recorder) {
+	if _, ok := r.(*herdrcore.Client); ok {
+		rec := &actions.CoreRecorder{}
+		return rec, &rec.Recorder
+	}
+	rec := &actions.Recorder{}
+	return rec, rec
+}

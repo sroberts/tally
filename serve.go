@@ -52,7 +52,7 @@ func serve(args []string) error {
 	noDevice := fs.Bool("no-device", false, "don't look for the MacroPad")
 	webOn := fs.Bool("web", false, "serve the browser pad over HTTPS (sign in with tally web --set-password)")
 	webListen := fs.String("web-listen", fmt.Sprintf(":%d", web.Port), "address for --web")
-	backend := fs.String("herdr", backendTUI, herdrFlagHelp+" (actions don't run against core yet)")
+	backend := fs.String("herdr", backendAuto, herdrFlagHelp)
 	webCert := fs.String("web-cert", "tailscale", "certificate for --web: tailscale (from Let's Encrypt via tailscale cert) or self (from tally's own CA; trust it with tally web --ca)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
@@ -96,18 +96,19 @@ func serve(args []string) error {
 		wg.Go(func() { link.Run(ctx) })
 	}
 	var d *daemon.Daemon
-	var writer actions.Writer
 	switch r := reader.(type) {
 	case *herdrcore.Client:
 		d = daemon.NewStream(cfg, r, emit, log)
-		writer = noActions{}
 	case *herdr.Client:
 		d = daemon.New(cfg, r, emit, log)
-		writer = herdr.NewWriter(path) // the only herdr Writer while tally serves
 	}
 
 	var srv *remote.Server
 	if *remoteOn || *webOn {
+		writer, err := newWriter(path, reader) // the only herdr writer while tally serves
+		if err != nil {
+			return err
+		}
 		if srv, err = newRemote(reader, writer, cfg.Slots, *listen, log); err != nil {
 			return err
 		}

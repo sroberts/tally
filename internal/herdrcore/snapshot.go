@@ -49,10 +49,32 @@ type layout struct {
 // node is one node of a tab's layout tree: a row or column of children, or
 // a block showing one thing.
 type node struct {
+	ID       string `json:"id"` // the pane id when this block shows a terminal
 	Children []node `json:"children"`
 	Content  *struct {
 		Terminal string `json:"terminal"`
 	} `json:"content"`
+}
+
+// panes maps each pane id under n to the terminal it shows.
+func (n node) panes(out map[string]string) {
+	if n.Content != nil && n.Content.Terminal != "" {
+		out[n.ID] = n.Content.Terminal
+	}
+	for _, c := range n.Children {
+		c.panes(out)
+	}
+}
+
+// panes maps every pane id in the layout to the terminal it shows.
+func (l layout) panes() map[string]string {
+	out := map[string]string{}
+	for _, sp := range l.Spaces {
+		for _, tab := range sp.Tabs {
+			tab.Root.panes(out)
+		}
+	}
+	return out
 }
 
 // terminals appends the terminals under n in layout order.
@@ -69,8 +91,9 @@ func (n node) terminals(out []string) []string {
 // Snapshot reads herdr-core's terminals and the app's layout and returns
 // them as a herdr.Snapshot. Agents come in the app's sidebar order: spaces,
 // then tabs, then each tab's terminals in layout order. A terminal the app
-// labels but hasn't placed yet goes after those. FocusedPaneID is always
-// nil: focus belongs to the app window, not to herdr-core.
+// labels but hasn't placed yet goes after those. Focus belongs to the app
+// window, not to herdr-core: FocusedPaneID is the terminal in the window's
+// focused pane when App is set and the window answers, else nil.
 func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	var list struct {
 		Terminals []terminal `json:"terminals"`
@@ -78,19 +101,36 @@ func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	if err := c.Call("terminal.list", nil, &list); err != nil {
 		return nil, err
 	}
+	l, err := c.layout()
+	if err != nil {
+		return nil, err
+	}
+	s := build(list.Terminals, l)
+	if c.App != nil {
+		// A closed window only means no focus; the lights still work.
+		if st, err := c.App.Status(); err == nil && st.Pane != "" {
+			if t, ok := l.panes()[st.Pane]; ok {
+				s.FocusedPaneID = &t
+			}
+		}
+	}
+	return s, nil
+}
+
+// layout reads the app's layout document; empty before the app first runs.
+func (c *Client) layout() (layout, error) {
 	var doc struct {
 		Value *layout `json:"value"` // null before the app first runs
 	}
 	if err := c.Call("doc.get", struct {
 		Name string `json:"name"`
 	}{LayoutDoc}, &doc); err != nil {
-		return nil, err
+		return layout{}, err
 	}
-	var l layout
-	if doc.Value != nil {
-		l = *doc.Value
+	if doc.Value == nil {
+		return layout{}, nil
 	}
-	return build(list.Terminals, l), nil
+	return *doc.Value, nil
 }
 
 // build is Snapshot without the socket.

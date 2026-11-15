@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/sroberts/tally/internal/actions"
-	"github.com/sroberts/tally/internal/herdr"
 )
 
 // act runs one action through the same table remote clients use. DRIVE
@@ -17,6 +16,7 @@ func act(args []string) error {
 	slot := fs.Int("slot", 0, "slot for focus_slot, from 1")
 	text := fs.String("text", "", "text for insert_text")
 	dry := fs.Bool("dry-run", false, "print the herdr calls instead of making them")
+	backend := fs.String("herdr", backendAuto, herdrFlagHelp)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	if len(args) == 0 || args[0] == "" || args[0][0] == '-' {
 		fs.Usage()
@@ -28,11 +28,10 @@ func act(args []string) error {
 		return fmt.Errorf("unknown action %q", name)
 	}
 
-	path, err := herdr.SocketPath()
+	path, reader, err := openHerdr(*backend)
 	if err != nil {
 		return err
 	}
-	reader := herdr.New(path)
 	if actions.IsDrive(name) && *target == "" {
 		snap, err := reader.Snapshot()
 		if err != nil {
@@ -44,10 +43,12 @@ func act(args []string) error {
 		*target = *snap.FocusedPaneID
 	}
 
-	var w actions.Writer = herdr.NewWriter(path)
+	var w actions.Writer
 	rec := &actions.Recorder{}
 	if *dry {
-		w = rec
+		w, rec = newRecorder(reader)
+	} else if w, err = newWriter(path, reader); err != nil {
+		return err
 	}
 	t := &actions.Table{W: w, Snapshot: reader.Snapshot}
 	if err := t.Do(actions.Request{Name: name, Target: *target, Slot: *slot, Text: *text}); err != nil {

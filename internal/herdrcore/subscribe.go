@@ -34,7 +34,7 @@ func (c *Client) SubscribeAll(ctx context.Context, notify func()) error {
 	if !allowed["events.subscribe"] {
 		return fmt.Errorf("herdr-core: method %q is not on Tally's read-only allowlist", "events.subscribe")
 	}
-	conn, err := dial(c.Path, "events.subscribe", nil)
+	conn, err := dial(c.Path, "events.subscribe", nil, Timeout)
 	if err != nil {
 		return err
 	}
