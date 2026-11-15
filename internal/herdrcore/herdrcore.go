@@ -33,9 +33,10 @@ const maxLine = 16 << 20
 
 // allowed lists every method Tally may call. Everything here only reads.
 var allowed = map[string]bool{
-	"hello":         true,
-	"terminal.list": true,
-	"doc.get":       true,
+	"hello":            true,
+	"terminal.list":    true,
+	"doc.get":          true,
+	"events.subscribe": true,
 }
 
 // SocketPath resolves herdr-core's client socket the way hc does: HC_SOCKET,
@@ -99,6 +100,26 @@ func (c *Client) Call(method string, params any, out any) error {
 }
 
 func call(path, method string, params any, out any) error {
+	conn, err := dial(path, method, params)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	line, err := readLine(bufio.NewReaderSize(conn, 64*1024))
+	if err != nil {
+		return fmt.Errorf("herdr-core: reading %s response: %w", method, err)
+	}
+	result, err := decode(method, line)
+	if err != nil || out == nil {
+		return err
+	}
+	return json.Unmarshal(result, out)
+}
+
+// dial connects to herdr-core at path and writes one request. The
+// connection's deadline is Timeout from now. Callers check their allowlist
+// first.
+func dial(path, method string, params any) (net.Conn, error) {
 	if params == nil {
 		params = struct{}{}
 	}
@@ -109,26 +130,18 @@ func call(path, method string, params any, out any) error {
 		Params  any    `json:"params"`
 	}{"2.0", 1, method, params})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	conn, err := dialSocket(path)
 	if err != nil {
-		return &herdr.OfflineError{Path: path, Err: err}
+		return nil, &herdr.OfflineError{Path: path, Err: err}
 	}
-	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(Timeout))
 	if _, err := conn.Write(append(req, '\n')); err != nil {
-		return &herdr.OfflineError{Path: path, Err: err}
+		conn.Close()
+		return nil, &herdr.OfflineError{Path: path, Err: err}
 	}
-	line, err := readLine(bufio.NewReaderSize(conn, 64*1024))
-	if err != nil {
-		return fmt.Errorf("herdr-core: reading %s response: %w", method, err)
-	}
-	result, err := decode(method, line)
-	if err != nil || out == nil {
-		return err
-	}
-	return json.Unmarshal(result, out)
+	return conn, nil
 }
 
 func readLine(r *bufio.Reader) ([]byte, error) {

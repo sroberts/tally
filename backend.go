@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/sroberts/tally/internal/herdr"
@@ -47,3 +48,29 @@ func openHerdr(choice string) (string, herdrReader, error) {
 	}
 	return "", nil, fmt.Errorf("--herdr %q: want core, tui or auto", choice)
 }
+
+// backendName names the herdr a reader talks to, for logs.
+func backendName(r herdrReader) string {
+	if _, ok := r.(*herdrcore.Client); ok {
+		return backendCore
+	}
+	return backendTUI
+}
+
+// errNoCoreActions is every action's answer against herdr-core until its
+// writers land: refusing is better than writing to the TUI's socket.
+var errNoCoreActions = errors.New("actions don't run against herdr-core yet; use --herdr tui")
+
+// noActions is the remote listener's writer against herdr-core for now. It
+// refuses every call.
+type noActions struct{}
+
+func (noActions) SendKeys(string, ...string) error { return errNoCoreActions }
+func (noActions) SendText(string, string) error    { return errNoCoreActions }
+func (noActions) Focus(string) error               { return errNoCoreActions }
+func (noActions) Zoom(string) error                { return errNoCoreActions }
+func (noActions) Pane(string) (herdr.PaneInfo, error) {
+	return herdr.PaneInfo{}, errNoCoreActions
+}
+func (noActions) CreateTab(string, string) (string, error) { return "", errNoCoreActions }
+func (noActions) Run(string, herdr.Command) error          { return errNoCoreActions }
