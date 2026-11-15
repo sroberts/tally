@@ -387,3 +387,19 @@ func fakeWindowFor(t *testing.T, got *[]string) (string, *string) {
 	}()
 	return path, focus
 }
+
+func TestHasLayout(t *testing.T) {
+	path, count := liveCore(t)
+	if ok, err := New(path).HasLayout(); !ok || err != nil {
+		t.Errorf("fixture: %v, %v", ok, err)
+	}
+	if got := count.Load(); got != 1 {
+		t.Errorf("requests = %d, want only doc.get", got)
+	}
+	path, _ = fakeCore(t, func(string, json.RawMessage) string {
+		return `{"jsonrpc":"2.0","id":1,"result":{"value":null,"version":0}}`
+	})
+	if ok, err := New(path).HasLayout(); ok || err != nil {
+		t.Errorf("null layout: %v, %v", ok, err)
+	}
+}
