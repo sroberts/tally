@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -86,9 +85,6 @@ func TestAgentCarriesHerdrCoreAndWindow(t *testing.T) {
 	env := map[string]string{"HC_SOCKET": "/tmp/c.sock", "HC_SESSION": "work", "HERDR_APP_HOME": "/tmp/app", "XDG_RUNTIME_DIR": "/run/user/1"}
 	got := agentEnv(func(k string) string { return env[k] })
 	want := map[string]string{"HC_SOCKET": "/tmp/c.sock", "HC_SESSION": "work", "HERDR_APP_HOME": "/tmp/app"}
-	if runtime.GOOS == "darwin" { // launchd gives the agent no XDG_RUNTIME_DIR of its own
-		want["XDG_RUNTIME_DIR"] = "/run/user/1"
-	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("env %v", got)
 	}

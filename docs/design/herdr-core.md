@@ -1,6 +1,6 @@
 # tally on herdr-core
 
-The Herdr desktop app doesn't run the herdr TUI's server. It runs on herdr-core (the `hc` program), which has its own protocol, its own socket and its own agents; the two don't share anything. tally reads either one, and herdr-core is where it's heading. `--herdr auto`, the default everywhere, uses herdr-core when it answers and the Herdr app has laid out its sidebar. Otherwise it uses a herdr TUI that answers, then a bare herdr-core, and with neither answering it falls back to the TUI. A bare herdr-core is `hc` running without the app ever having opened, which has no agents to show. auto decides once per process, so `tally serve` waits up to a minute at start while neither answers, in case the Herdr app is still starting at login.
+The Herdr desktop app doesn't run the herdr TUI's server. It runs on herdr-core (the `hc` program), which has its own protocol, its own socket and its own agents; the two don't share anything. tally reads either one, and herdr-core is where it's heading. `--herdr auto`, the default everywhere, uses herdr-core when it answers and the Herdr app has laid out its sidebar. Otherwise it uses a herdr TUI that answers, then a bare herdr-core, and with neither answering it falls back to the TUI. A bare herdr-core is `hc` running without the app ever having opened, which has no agents to show. auto decides once per process, so `tally serve` waits up to a minute at start while neither answers (a bare herdr-core doesn't end the wait), in case the Herdr app or the TUI is still starting at login.
 
 Both backends produce the same `herdr.Snapshot` and drive the same `actions.Writer`, so slots, frames, lighting, the remote listener, the browser pad, the v2 serial frame and protocol v3 don't know which one they're talking to.
 
@@ -11,7 +11,7 @@ Both backends produce the same `herdr.Snapshot` and drive the same `actions.Writ
 | herdr-core | `HC_SOCKET`, else `<session>.sock` (`HC_SESSION`, default `default`) under `$XDG_RUNTIME_DIR/herdr-core/`, `/run/user/<uid>/herdr-core/`, or `~/.local/state/herdr-core/<session>/` | JSON-RPC 2.0, one message per line | agents, status, events, keys, text |
 | Herdr window | `$HERDR_APP_HOME/herdr-app.sock`, default `~/.config/herdr-app/` | one JSON line each way, the herdr-app CLI's format | focus, zoom, new tabs |
 
-`tally install-agent` carries `HC_SOCKET`, `HC_SESSION` and `HERDR_APP_HOME` into the background agent, alongside the TUI's `HERDR_SOCKET_PATH` and `HERDR_SESSION`. On macOS it also carries `XDG_RUNTIME_DIR`, which launchd doesn't set but herdr-core's socket path can use; systemd gives a user unit its own.
+`tally install-agent` carries `HC_SOCKET`, `HC_SESSION` and `HERDR_APP_HOME` into the background agent, alongside the TUI's `HERDR_SOCKET_PATH` and `HERDR_SESSION`. It leaves `XDG_RUNTIME_DIR` out on purpose. launchd starts the agent without one, the way Finder starts the Herdr app, so the agent looks for herdr-core where the app's herdr-core listens. systemd gives a user unit its own. If you run `hc` from a shell that sets `XDG_RUNTIME_DIR`, pass `HC_SOCKET` instead.
 
 ## Reading
 

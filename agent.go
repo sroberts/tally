@@ -150,15 +150,13 @@ func (o agentOptions) serving() web.Serving {
 
 // agentEnv is the environment the agent keeps: the service manager doesn't
 // see the shell's, so carry over which herdr-core session, Herdr window and
-// herdr TUI session to use. herdr-core also looks under XDG_RUNTIME_DIR;
-// systemd gives a user unit its own, but launchd gives an agent none, so on
-// macOS a shell's is carried too.
+// herdr TUI session to use. XDG_RUNTIME_DIR stays behind on purpose: launchd
+// starts the agent the way Finder starts the Herdr app, without one, so the
+// agent looks for herdr-core where the app's herdr-core listens; systemd
+// gives a user unit its own.
 func agentEnv(getenv func(string) string) map[string]string {
 	env := map[string]string{}
 	keys := []string{"HC_SOCKET", "HC_SESSION", "HERDR_APP_HOME", "HERDR_SOCKET_PATH", "HERDR_SESSION"}
-	if runtime.GOOS == "darwin" {
-		keys = append(keys, "XDG_RUNTIME_DIR")
-	}
 	for _, k := range keys {
 		if v := getenv(k); v != "" {
 			env[k] = v
