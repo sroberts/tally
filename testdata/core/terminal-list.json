@@ -1,0 +1,446 @@
+{
+ "id": 1,
+ "jsonrpc": "2.0",
+ "result": {
+  "hidden_finished": 1,
+  "terminals": [
+   {
+    "address": "t1",
+    "argv": [
+     "SECRET-1",
+     "SECRET-2"
+    ],
+    "cols": 130,
+    "created_ms": 1793935557767,
+    "cwd": "SECRET-3",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-4"
+     ],
+     "cwd": "SECRET-5",
+     "name": "SECRET-6",
+     "pid": 6826
+    },
+    "identity": "SECRET-7",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "34",
+     "herdr.space": "spa7f778d027fefc50864dc007253ffc27",
+     "herdr.tab": "tbc077c4947b2d1f8c79eda623d0d62cf9",
+     "SECRET-label-8": "SECRET-9"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 95511,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-10",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-11",
+     "state": "working"
+    },
+    "status_ms": 1794756433777,
+    "template": null,
+    "title": "SECRET-12",
+    "turn": 34
+   },
+   {
+    "address": "t4",
+    "argv": [
+     "SECRET-13",
+     "SECRET-14"
+    ],
+    "cols": 130,
+    "created_ms": 1794161944523,
+    "cwd": "SECRET-15",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-16"
+     ],
+     "cwd": "SECRET-17",
+     "name": "SECRET-18",
+     "pid": 97591
+    },
+    "identity": "SECRET-19",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "43",
+     "herdr.space": "sp6a1afce46cf813f50f94bfd4ee8624d2",
+     "herdr.tab": "tbbe0c7ef5fc1c056fb3e9317cf4d95a28",
+     "SECRET-label-20": "SECRET-21"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 93370,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-22",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "state": "done"
+    },
+    "status_ms": 1794754885267,
+    "template": null,
+    "title": "SECRET-23",
+    "turn": 43
+   },
+   {
+    "address": "t7",
+    "argv": [
+     "SECRET-24",
+     "SECRET-25"
+    ],
+    "cols": 130,
+    "created_ms": 1794162301452,
+    "cwd": "SECRET-26",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-27"
+     ],
+     "cwd": "SECRET-28",
+     "name": "SECRET-29",
+     "pid": 7621
+    },
+    "identity": "SECRET-30",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "37",
+     "herdr.space": "spd5e321b52f9f3089b8761cde4cacaaff",
+     "herdr.tab": "tbd8cfe73635d6b494d1775053b0c14d5f",
+     "SECRET-label-31": "SECRET-32"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 5870,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-33",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-34",
+     "state": "working"
+    },
+    "status_ms": 1794756429554,
+    "template": null,
+    "title": "SECRET-35",
+    "turn": 37
+   },
+   {
+    "address": "t9",
+    "argv": [
+     "SECRET-36",
+     "SECRET-37"
+    ],
+    "cols": 130,
+    "created_ms": 1794165997935,
+    "cwd": "SECRET-38",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-39"
+     ],
+     "cwd": "SECRET-40",
+     "name": "SECRET-41",
+     "pid": 20800
+    },
+    "identity": "SECRET-42",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "19",
+     "herdr.space": "spfd4e71be94dbc3cc9c94bee4c7d1f57e",
+     "herdr.tab": "tb58be5e3484ae44e2d11a23b9c07ad234",
+     "SECRET-label-43": "SECRET-44"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 18292,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-45",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-46",
+     "state": "working"
+    },
+    "status_ms": 1794756405261,
+    "template": null,
+    "title": "SECRET-47",
+    "turn": 19
+   },
+   {
+    "address": "t11",
+    "argv": [
+     "SECRET-48",
+     "SECRET-49"
+    ],
+    "cols": 130,
+    "created_ms": 1794166431192,
+    "cwd": "SECRET-50",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-51"
+     ],
+     "cwd": "SECRET-52",
+     "name": "SECRET-53",
+     "pid": 29243
+    },
+    "identity": "SECRET-54",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "43",
+     "herdr.space": "spdb2dddb7b43fb8918ca7edea73d34969",
+     "herdr.tab": "tb47f262e402d12bb1a0fa6eed67d8593f",
+     "SECRET-label-55": "SECRET-56"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 22689,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-57",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-58",
+     "state": "working"
+    },
+    "status_ms": 1794756417224,
+    "template": null,
+    "title": "SECRET-59",
+    "turn": 43
+   },
+   {
+    "address": "t13",
+    "argv": [
+     "SECRET-60",
+     "SECRET-61"
+    ],
+    "cols": 130,
+    "created_ms": 1794167836255,
+    "cwd": "SECRET-62",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-63",
+      "SECRET-64"
+     ],
+     "cwd": "SECRET-65",
+     "name": "SECRET-66",
+     "pid": 14444
+    },
+    "identity": "SECRET-67",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "31",
+     "herdr.space": "sp05e579a6921f5e5842310d7a05f3c6e8",
+     "herdr.tab": "tb241e756b66f8a0c4341144ac9a05cc6e",
+     "SECRET-label-68": "SECRET-69"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 64498,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-70",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-71",
+     "state": "working"
+    },
+    "status_ms": 1794756442827,
+    "template": null,
+    "title": "SECRET-72",
+    "turn": 31
+   },
+   {
+    "address": "t15",
+    "argv": [
+     "SECRET-73",
+     "SECRET-74"
+    ],
+    "cols": 200,
+    "created_ms": 1794206142850,
+    "cwd": "SECRET-75",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-76",
+      "SECRET-77"
+     ],
+     "cwd": "SECRET-78",
+     "name": "SECRET-79",
+     "pid": 98216
+    },
+    "identity": "SECRET-80",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "0",
+     "herdr.space": "spdb2dddb7b43fb8918ca7edea73d34969",
+     "herdr.tab": "tbfea61a9101041ba3a6085a1c452d89ed",
+     "SECRET-label-81": "SECRET-82"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 98216,
+    "reason": null,
+    "reported": false,
+    "rm": false,
+    "rows": 120,
+    "screen": "SECRET-83",
+    "signal": null,
+    "state": "live",
+    "status": null,
+    "status_ms": null,
+    "template": null,
+    "title": "SECRET-84",
+    "turn": 0
+   },
+   {
+    "address": "t16",
+    "argv": [
+     "SECRET-85",
+     "SECRET-86"
+    ],
+    "cols": 130,
+    "created_ms": 1794711399084,
+    "cwd": "SECRET-87",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-88"
+     ],
+     "cwd": "SECRET-89",
+     "name": "SECRET-90",
+     "pid": 9962
+    },
+    "identity": "SECRET-91",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "5",
+     "herdr.space": "speb247f791ccc921bd94ab1e125ebb7d3",
+     "herdr.tab": "tb442e00bdf238cf1dbcd19f7659b05b10",
+     "SECRET-label-92": "SECRET-93"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 6997,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-94",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "state": "done"
+    },
+    "status_ms": 1794756471457,
+    "template": null,
+    "title": "SECRET-95",
+    "turn": 6
+   },
+   {
+    "address": "t17",
+    "argv": [
+     "SECRET-96",
+     "SECRET-97"
+    ],
+    "cols": 130,
+    "created_ms": 1794711509178,
+    "cwd": "SECRET-98",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "foreground": {
+     "argv": [
+      "SECRET-99"
+     ],
+     "cwd": "SECRET-100",
+     "name": "SECRET-101",
+     "pid": 48405
+    },
+    "identity": "SECRET-102",
+    "keep": true,
+    "labels": {
+     "herdr.seen": "3",
+     "herdr.space": "sp4d220c1f347b96eed616e87424c4f1bf",
+     "herdr.tab": "tbd6aa10eca8b9542a23cbf54463495981",
+     "SECRET-label-103": "SECRET-104"
+    },
+    "name": null,
+    "notify": true,
+    "parent": null,
+    "pid": 20075,
+    "reason": null,
+    "reported": true,
+    "rm": false,
+    "rows": 34,
+    "screen": "SECRET-105",
+    "signal": null,
+    "state": "live",
+    "status": {
+     "app": "claude-code",
+     "msg": "SECRET-106",
+     "state": "working"
+    },
+    "status_ms": 1794756391525,
+    "template": null,
+    "title": "SECRET-107",
+    "turn": 3
+   }
+  ]
+ }
+}

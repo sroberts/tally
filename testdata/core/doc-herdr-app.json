@@ -1,0 +1,220 @@
+{
+ "id": 1,
+ "jsonrpc": "2.0",
+ "result": {
+  "value": {
+   "spaces": [
+    {
+     "folder": "SECRET-108",
+     "id": "spa7f778d027fefc50864dc007253ffc27",
+     "name": "space-label-1",
+     "tabs": [
+      {
+       "id": "tbc077c4947b2d1f8c79eda623d0d62cf9",
+       "name": "SECRET-109",
+       "root": {
+        "id": "tbc077c4947b2d1f8c79eda623d0d62cf9",
+        "type": "row",
+        "children": [
+         {
+          "id": "pd7bb02e3f80de3a9b62c90318810d9b2",
+          "type": "block",
+          "content": {
+           "terminal": "t1"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-110",
+     "id": "sp6a1afce46cf813f50f94bfd4ee8624d2",
+     "name": "space-label-2",
+     "tabs": [
+      {
+       "id": "tbbe0c7ef5fc1c056fb3e9317cf4d95a28",
+       "name": "SECRET-111",
+       "root": {
+        "id": "tbbe0c7ef5fc1c056fb3e9317cf4d95a28",
+        "type": "row",
+        "children": [
+         {
+          "id": "p10d13e240a029ea2d58d23cc24b083be",
+          "type": "block",
+          "content": {
+           "terminal": "t4"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-112",
+     "id": "spd5e321b52f9f3089b8761cde4cacaaff",
+     "name": "space-label-3",
+     "tabs": [
+      {
+       "id": "tbd8cfe73635d6b494d1775053b0c14d5f",
+       "name": "SECRET-113",
+       "root": {
+        "id": "tbd8cfe73635d6b494d1775053b0c14d5f",
+        "type": "row",
+        "children": [
+         {
+          "id": "p5ba068b907267afd19e5f9b08ba62798",
+          "type": "block",
+          "content": {
+           "terminal": "t7"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-114",
+     "id": "spfd4e71be94dbc3cc9c94bee4c7d1f57e",
+     "name": "space-label-4",
+     "tabs": [
+      {
+       "id": "tb58be5e3484ae44e2d11a23b9c07ad234",
+       "name": "SECRET-115",
+       "root": {
+        "id": "tb58be5e3484ae44e2d11a23b9c07ad234",
+        "type": "row",
+        "children": [
+         {
+          "id": "p6fc3a977f272b64da0ee3f34fddc70c3",
+          "type": "block",
+          "content": {
+           "terminal": "t9"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-116",
+     "id": "spdb2dddb7b43fb8918ca7edea73d34969",
+     "name": "space-label-5",
+     "tabs": [
+      {
+       "id": "tb47f262e402d12bb1a0fa6eed67d8593f",
+       "name": "SECRET-117",
+       "root": {
+        "id": "tb47f262e402d12bb1a0fa6eed67d8593f",
+        "type": "row",
+        "children": [
+         {
+          "id": "pae48ad13d693f16f36fea54fa37923f5",
+          "type": "block",
+          "content": {
+           "terminal": "t11"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "id": "tbfea61a9101041ba3a6085a1c452d89ed",
+       "name": "SECRET-118",
+       "root": {
+        "id": "tbfea61a9101041ba3a6085a1c452d89ed",
+        "type": "row",
+        "children": [
+         {
+          "id": "p98b1eaa04533d154bc09c135b9b442fe",
+          "type": "block",
+          "content": {
+           "terminal": "t15"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-119",
+     "id": "sp05e579a6921f5e5842310d7a05f3c6e8",
+     "name": "space-label-6",
+     "tabs": [
+      {
+       "id": "tb241e756b66f8a0c4341144ac9a05cc6e",
+       "name": "SECRET-120",
+       "root": {
+        "id": "tb241e756b66f8a0c4341144ac9a05cc6e",
+        "type": "row",
+        "children": [
+         {
+          "id": "p7735ec955eb356b958db83c27b57ccd1",
+          "type": "block",
+          "content": {
+           "terminal": "t13"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-121",
+     "id": "speb247f791ccc921bd94ab1e125ebb7d3",
+     "name": "space-label-7",
+     "tabs": [
+      {
+       "id": "tb442e00bdf238cf1dbcd19f7659b05b10",
+       "name": "SECRET-122",
+       "root": {
+        "id": "tb442e00bdf238cf1dbcd19f7659b05b10",
+        "type": "row",
+        "children": [
+         {
+          "id": "p69477b1c7d2afa355223c864c1b9ffeb",
+          "type": "block",
+          "content": {
+           "terminal": "t16"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "folder": "SECRET-123",
+     "id": "sp4d220c1f347b96eed616e87424c4f1bf",
+     "name": "space-label-8",
+     "tabs": [
+      {
+       "id": "tbd6aa10eca8b9542a23cbf54463495981",
+       "name": "SECRET-124",
+       "root": {
+        "id": "tbd6aa10eca8b9542a23cbf54463495981",
+        "type": "row",
+        "children": [
+         {
+          "id": "pac1e6174a630ddf4badb7344dc030a9b",
+          "type": "block",
+          "content": {
+           "terminal": "t17"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "version": 25
+ }
+}

@@ -19,14 +19,14 @@ func status(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the state frame instead of the table")
 	n := fs.Int("slots", slots.DefaultSlots, "number of Fleet slot keys")
+	backend := fs.String("herdr", backendAuto, herdrFlagHelp)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	fs.Parse(args)
 
-	path, err := herdr.SocketPath()
+	path, c, err := openHerdr(*backend)
 	if err != nil {
 		return err
 	}
-	c := herdr.New(path)
 	if err := c.Ping(); err != nil {
 		if *asJSON {
 			fmt.Printf("%s\n", slots.Offline(*n, 1).JSON())
