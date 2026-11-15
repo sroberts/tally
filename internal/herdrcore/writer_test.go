@@ -3,8 +3,12 @@ package herdrcore
 import (
 	"encoding/json"
 	"errors"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sroberts/tally/internal/herdr"
 	"github.com/sroberts/tally/internal/herdrapp"
@@ -137,5 +141,65 @@ func TestSnapshotFocusFromTheWindow(t *testing.T) {
 	snap, err = c.Snapshot()
 	if err != nil || snap.FocusedPaneID != nil || len(snap.Agents) != 8 {
 		t.Errorf("closed window: %v, %+v", err, snap)
+	}
+}
+
+func TestZoomPrefersTheFocusedPane(t *testing.T) {
+	// t1 shows in two panes: pa (first in layout order) and pb.
+	doc := `{"jsonrpc":"2.0","id":1,"result":{"version":1,"value":{"spaces":[{"id":"s","name":"n","tabs":[
+		{"id":"a","root":{"id":"r1","type":"row","children":[{"id":"pa","type":"block","content":{"terminal":"t1"}}]}},
+		{"id":"b","root":{"id":"r2","type":"row","children":[{"id":"pb","type":"block","content":{"terminal":"t1"}},{"id":"pc","type":"block","content":{"terminal":"t2"}}]}}]}]}}}`
+	doc = strings.ReplaceAll(strings.ReplaceAll(doc, "\n", ""), "\t", "")
+	path, _ := recordingCore(t, func(string) string { return doc })
+	var got []string
+	app, focus := fakeWindowFor(t, &got)
+	w := NewWriter(path, app)
+
+	*focus = "pb"
+	w.Zoom("t1")
+	*focus = "pc" // focus is on another terminal: first pane in layout order
+	w.Zoom("t1")
+	*focus = ""
+	w.Zoom("t1")
+	want := []string{
+		`{"do":"pane.zoom","args":{"pane":"pb"}}`,
+		`{"do":"pane.zoom","args":{"pane":"pa"}}`,
+		`{"do":"pane.zoom","args":{"pane":"pa"}}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("window got %q", got)
+	}
+}
+
+func TestSnapshotDoesNotWaitOnAHungWindow(t *testing.T) {
+	path, _ := liveCore(t)
+	dir, err := os.MkdirTemp("/tmp", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := filepath.Join(dir, "a.sock")
+	l, err := net.Listen("unix", app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { l.Close(); os.RemoveAll(dir) })
+	go func() { // accepts and never answers
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+		}
+	}()
+	c := New(path)
+	c.App = &herdrapp.Viewer{Path: app}
+	start := time.Now()
+	snap, err := c.Snapshot()
+	if err != nil || snap.FocusedPaneID != nil || len(snap.Agents) != 8 {
+		t.Errorf("snapshot: %v, %+v", err, snap)
+	}
+	if took := time.Since(start); took > 2*herdrapp.StatusTimeout {
+		t.Errorf("snapshot took %v", took)
 	}
 }

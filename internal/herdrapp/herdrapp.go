@@ -17,14 +17,20 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sroberts/tally/internal/herdr"
 )
 
-// Timeout bounds a whole exchange. The window answers within 5 s or sends
-// its own error.
+// Timeout bounds a whole command exchange. The window answers within 5 s or
+// sends its own error.
 const Timeout = 6 * time.Second
+
+// StatusTimeout bounds a status read. Every snapshot asks for focus, and
+// focus is optional: a window that is slow to answer must not hold up the
+// lights or an action.
+const StatusTimeout = 500 * time.Millisecond
 
 // Closed is the herdr.Error code for a Herdr window that isn't open.
 const Closed = "window_closed"
@@ -54,12 +60,12 @@ func SocketPath() (string, error) {
 }
 
 // dialSocket opens the window's socket; tests replace it.
-var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("unix", path, Timeout) }
+var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("unix", path, StatusTimeout) }
 
 // call sends one request line and decodes the reply into out. A window that
 // isn't there is a *herdr.Error with code Closed; a reply of {"error": ...}
 // is one with code Refused.
-func call(path string, req any, out any) error {
+func call(path string, req any, out any, timeout time.Duration) error {
 	line, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -69,7 +75,7 @@ func call(path string, req any, out any) error {
 		return &herdr.Error{Code: Closed, Message: "the Herdr window isn't open"}
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(Timeout))
+	conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := conn.Write(append(line, '\n')); err != nil {
 		return &herdr.Error{Code: Closed, Message: "the Herdr window isn't open"}
 	}
@@ -110,7 +116,7 @@ func (v *Viewer) Status() (Status, error) {
 	var s Status
 	err := call(v.Path, struct {
 		Status bool `json:"status"`
-	}{true}, &s)
+	}{true}, &s, StatusTimeout)
 	return s, err
 }
 
@@ -127,10 +133,25 @@ func (w *Window) Do(command string, args any) error {
 	if !allowedDo[command] {
 		return fmt.Errorf("herdr-app: command %q is not on Tally's allowlist", command)
 	}
-	return call(w.Path, struct {
+	err := call(w.Path, struct {
 		Do   string `json:"do"`
 		Args any    `json:"args"`
-	}{command, args}, nil)
+	}{command, args}, nil, Timeout)
+	return scrub(command, err)
+}
+
+// scrub replaces the window's own error text, which may quote a title or a
+// folder, with tally's words. Only a terminal that isn't running is told
+// apart, so the table can call it gone.
+func scrub(command string, err error) error {
+	var he *herdr.Error
+	if !errors.As(err, &he) || he.Code != Refused {
+		return err
+	}
+	if strings.HasPrefix(he.Message, "no running terminal") {
+		return &herdr.Error{Code: "not_found", Message: "no running terminal"}
+	}
+	return &herdr.Error{Code: Refused, Message: "the Herdr window refused " + command}
 }
 
 // FocusAgent shows the agent running in terminal.

@@ -56,25 +56,46 @@ type node struct {
 	} `json:"content"`
 }
 
-// panes maps each pane id under n to the terminal it shows.
-func (n node) panes(out map[string]string) {
-	if n.Content != nil && n.Content.Terminal != "" {
-		out[n.ID] = n.Content.Terminal
+// find returns the first block under n, in layout order, that match accepts.
+func (n node) find(match func(node) bool) *node {
+	if n.Content != nil && n.Content.Terminal != "" && match(n) {
+		return &n
 	}
 	for _, c := range n.Children {
-		c.panes(out)
-	}
-}
-
-// panes maps every pane id in the layout to the terminal it shows.
-func (l layout) panes() map[string]string {
-	out := map[string]string{}
-	for _, sp := range l.Spaces {
-		for _, tab := range sp.Tabs {
-			tab.Root.panes(out)
+		if f := c.find(match); f != nil {
+			return f
 		}
 	}
-	return out
+	return nil
+}
+
+// find returns the first block in the layout, in sidebar order, that match
+// accepts.
+func (l layout) find(match func(node) bool) *node {
+	for _, sp := range l.Spaces {
+		for _, tab := range sp.Tabs {
+			if f := tab.Root.find(match); f != nil {
+				return f
+			}
+		}
+	}
+	return nil
+}
+
+// terminalAt is the terminal the pane shows, or "".
+func (l layout) terminalAt(pane string) string {
+	if f := l.find(func(n node) bool { return n.ID == pane }); f != nil {
+		return f.Content.Terminal
+	}
+	return ""
+}
+
+// paneOf is the first pane showing the terminal, or "".
+func (l layout) paneOf(terminal string) string {
+	if f := l.find(func(n node) bool { return n.Content.Terminal == terminal }); f != nil {
+		return f.ID
+	}
+	return ""
 }
 
 // terminals appends the terminals under n in layout order.
@@ -109,7 +130,7 @@ func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	if c.App != nil {
 		// A closed window only means no focus; the lights still work.
 		if st, err := c.App.Status(); err == nil && st.Pane != "" {
-			if t, ok := l.panes()[st.Pane]; ok {
+			if t := l.terminalAt(st.Pane); t != "" {
 				s.FocusedPaneID = &t
 			}
 		}
@@ -145,10 +166,12 @@ func build(terms []terminal, l layout) *herdr.Snapshot {
 	s := &herdr.Snapshot{Workspaces: []herdr.Workspace{}, Tabs: []herdr.Tab{}, Agents: []herdr.Agent{}}
 	placed := map[string]bool{}
 	spaces := map[string]bool{}
+	tabs := map[string]string{} // tab id -> its space
 	for i, sp := range l.Spaces {
 		spaces[sp.ID] = true
 		s.Workspaces = append(s.Workspaces, herdr.Workspace{ID: sp.ID, Number: i + 1, Label: sp.Name})
 		for j, tab := range sp.Tabs {
+			tabs[tab.ID] = sp.ID
 			s.Tabs = append(s.Tabs, herdr.Tab{ID: tab.ID, WorkspaceID: sp.ID, Number: j + 1})
 			for _, addr := range tab.Root.terminals(nil) {
 				t, ok := agents[addr]
@@ -164,7 +187,11 @@ func build(terms []terminal, l layout) *herdr.Snapshot {
 		a, ok := agents[t.Address]
 		if ok && !placed[t.Address] && spaces[a.Labels.Space] {
 			placed[t.Address] = true
-			s.Agents = append(s.Agents, agent(a, a.Labels.Space, a.Labels.Tab))
+			tab := a.Labels.Tab
+			if tabs[tab] != a.Labels.Space {
+				tab = "" // a tab that isn't in that space, or is gone
+			}
+			s.Agents = append(s.Agents, agent(a, a.Labels.Space, tab))
 		}
 	}
 	return s

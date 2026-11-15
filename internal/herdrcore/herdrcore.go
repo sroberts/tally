@@ -11,6 +11,7 @@ package herdrcore
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -65,10 +66,7 @@ func socketPath(getenv func(string) string, uid int, exists func(string) bool) (
 	}
 	home := getenv("HOME")
 	if home == "" {
-		var err error
-		if home, err = os.UserHomeDir(); err != nil {
-			return "", err
-		}
+		return "", errors.New("herdr-core: $HOME is not set, so its socket can't be found (set HC_SOCKET)")
 	}
 	return filepath.Join(home, ".local", "state", "herdr-core", session, name), nil
 }
@@ -97,10 +95,18 @@ var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("u
 // Failures are a *herdr.OfflineError when the socket doesn't answer and a
 // *herdr.Error when herdr-core refuses, so callers treat both herdrs alike.
 func (c *Client) Call(method string, params any, out any) error {
+	if err := checkAllowed(method); err != nil {
+		return err
+	}
+	return call(c.Path, method, params, out, Timeout)
+}
+
+// checkAllowed refuses a method outside the read allowlist.
+func checkAllowed(method string) error {
 	if !allowed[method] {
 		return fmt.Errorf("herdr-core: method %q is not on Tally's read-only allowlist", method)
 	}
-	return call(c.Path, method, params, out, Timeout)
+	return nil
 }
 
 func call(path, method string, params any, out any, timeout time.Duration) error {

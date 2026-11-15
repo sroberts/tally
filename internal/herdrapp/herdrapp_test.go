@@ -108,7 +108,14 @@ func TestRefusedAndClosed(t *testing.T) {
 	path, _ := fakeWindow(t, func(string) string { return `{"error":"no running terminal \"t99\""}` })
 	err := NewWindow(path).FocusAgent("t99")
 	var he *herdr.Error
-	if !errors.As(err, &he) || he.Code != Refused || !strings.Contains(he.Message, "t99") {
+	if !errors.As(err, &he) || he.Code != "not_found" || he.Message != "no running terminal" {
+		t.Fatalf("err = %v", err)
+	}
+	// Any other refusal keeps none of the window's words: they may quote a
+	// title or a folder.
+	path, _ = fakeWindow(t, func(string) string { return `{"error":"spawn failed in SECRET"}` })
+	err = NewWindow(path).NewTab("", "", herdr.Claude)
+	if !errors.As(err, &he) || he.Code != Refused || strings.Contains(err.Error(), "SECRET") {
 		t.Fatalf("err = %v", err)
 	}
 	err = NewWindow("/tmp/no-such-herdr-app.sock").FocusAgent("t1")
