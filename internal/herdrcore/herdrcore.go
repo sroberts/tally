@@ -91,10 +91,18 @@ var dialSocket = func(path string) (net.Conn, error) { return net.DialTimeout("u
 // Failures are a *herdr.OfflineError when the socket doesn't answer and a
 // *herdr.Error when herdr-core refuses, so callers treat both herdrs alike.
 func (c *Client) Call(method string, params any, out any) error {
+	if err := checkAllowed(method); err != nil {
+		return err
+	}
+	return call(c.Path, method, params, out)
+}
+
+// checkAllowed refuses a method outside the read allowlist.
+func checkAllowed(method string) error {
 	if !allowed[method] {
 		return fmt.Errorf("herdr-core: method %q is not on Tally's read-only allowlist", method)
 	}
-	return call(c.Path, method, params, out)
+	return nil
 }
 
 func call(path, method string, params any, out any) error {

@@ -96,18 +96,21 @@ func serve(args []string) error {
 		wg.Go(func() { link.Run(ctx) })
 	}
 	var d *daemon.Daemon
-	var writer actions.Writer
 	switch r := reader.(type) {
 	case *herdrcore.Client:
 		d = daemon.NewStream(cfg, r, emit, log)
-		writer = noActions{}
 	case *herdr.Client:
 		d = daemon.New(cfg, r, emit, log)
-		writer = herdr.NewWriter(path) // the only herdr Writer while tally serves
+	default:
+		return fmt.Errorf("no daemon for %T", reader)
 	}
 
 	var srv *remote.Server
 	if *remoteOn || *webOn {
+		var writer actions.Writer = noActions{}
+		if _, ok := reader.(*herdr.Client); ok {
+			writer = herdr.NewWriter(path) // the only herdr Writer while tally serves
+		}
 		if srv, err = newRemote(reader, writer, cfg.Slots, *listen, log); err != nil {
 			return err
 		}
