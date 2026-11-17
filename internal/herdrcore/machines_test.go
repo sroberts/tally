@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sroberts/tally/internal/herdr"
@@ -18,7 +20,15 @@ import (
 // laptopCore is a herdr-core on the computer running the Herdr app, with
 // the Mac mini added as machine mm. Its own layout has space L; mm's has
 // sp1 (pane p1 showing t3) and sp2 (empty). Machine off is unreachable.
+// It doesn't answer machine.list: terminal.list says which are connected.
 func laptopCore(t *testing.T, localDoc string) string {
+	t.Helper()
+	return laptopCoreWith(t, localDoc, nil)
+}
+
+// laptopCoreWith is laptopCore whose mm layout reads fail while mmDown is
+// set, as over a slow link.
+func laptopCoreWith(t *testing.T, localDoc string, mmDown *atomic.Bool) string {
 	t.Helper()
 	const list = `{"jsonrpc":"2.0","id":1,"result":{"hidden_finished":0,
 		"machines":[{"name":"mm","state":"connected"},{"name":"off","state":"unreachable"}],
@@ -36,15 +46,15 @@ func laptopCore(t *testing.T, localDoc string) string {
 		switch method {
 		case "terminal.list":
 			return oneLine(list)
-		case "machine.list":
-			return `{"jsonrpc":"2.0","id":1,"result":{"machines":[{"name":"mm","state":"connected"},{"name":"off","state":"unreachable"}]}}`
 		case "doc.get":
 			var p struct{ On string }
 			json.Unmarshal(params, &p)
-			switch p.On {
-			case "":
+			switch {
+			case p.On == "":
 				return oneLine(localDoc)
-			case "mm":
+			case p.On == "mm" && mmDown != nil && mmDown.Load():
+				return `{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"SECRET","data":{"kind":"unavailable"}}}`
+			case p.On == "mm":
 				return oneLine(mmDoc)
 			}
 			t.Errorf("doc.get on %q", p.On)
@@ -147,7 +157,62 @@ func TestWriterOnAConnectedMachine(t *testing.T) {
 	}
 }
 
+func TestSnapshotKeepsAMachinesLastLayout(t *testing.T) {
+	var down atomic.Bool
+	c := New(laptopCoreWith(t, laptopLocal, &down))
+	first, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// mm's layout doesn't answer once: its agents keep their slots.
+	down.Store(true)
+	again, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, b := agentsOf(first), agentsOf(again); !reflect.DeepEqual(a, b) {
+		t.Errorf("a missed read moved the slots:\n%v\n%v", a, b)
+	}
+	// A client that never read mm's layout leaves mm out, and still works.
+	fresh, err := New(laptopCoreWith(t, laptopLocal, &down)).Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := agentsOf(fresh); !reflect.DeepEqual(got, []string{"t1@L/lt:working"}) {
+		t.Errorf("agents = %v", got)
+	}
+}
+
+func TestSnapshotKeepsTheWindowsLastOrder(t *testing.T) {
+	path := laptopCore(t, laptopLocal)
+	app := fakeLaptopWindow(t, `{"space":"L","tab":"lt","focused_pane":"lp"}`,
+		`{"spaces":[{"id":"mm/sp1","machine":"mm"},{"id":"L","machine":null},{"id":"mm/sp2","machine":"mm"}]}`)
+	c := New(path)
+	c.App = &herdrapp.Viewer{Path: app}
+	want := []string{"mm/t3@mm/sp1/mm/a:done", "t1@L/lt:working", "mm/t4@mm/sp2/mm/b:blocked"}
+	for i, ls := range []string{"", `{"error":"SECRET"}`, "closed"} {
+		switch ls {
+		case "closed":
+			c.App = &herdrapp.Viewer{Path: app + ".gone"} // the window closed
+		case "":
+		default:
+			setLs(app, ls) // ls refused after status answered
+		}
+		snap, err := c.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := agentsOf(snap); !reflect.DeepEqual(got, want) {
+			t.Errorf("%d: agents = %v\nwant     %v", i, got, want)
+		}
+	}
+}
+
 var windowLogs = map[string]*[]string{}
+
+var windowLs sync.Map // path -> ls reply overriding the one given
+
+func setLs(path, ls string) { windowLs.Store(path, ls) }
 
 func windowLog(path string) []string { return *windowLogs[path] }
 
@@ -179,7 +244,11 @@ func fakeLaptopWindow(t *testing.T, status, ls string) string {
 				case `{"status":true}`:
 					fmt.Fprintln(conn, status)
 				case `{"ls":true}`:
-					fmt.Fprintln(conn, ls)
+					if o, ok := windowLs.Load(path); ok {
+						fmt.Fprintln(conn, o)
+					} else {
+						fmt.Fprintln(conn, ls)
+					}
 				default:
 					*got = append(*got, line)
 					fmt.Fprintln(conn, `{"ok":true}`)

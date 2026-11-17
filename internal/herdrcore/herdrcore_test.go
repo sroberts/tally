@@ -158,7 +158,7 @@ func TestDecoderDropsPrivateFields(t *testing.T) {
 	if err := json.Unmarshal([]byte(doc), &dr); err != nil {
 		t.Fatal(err)
 	}
-	dump := fmt.Sprintf("%#v %#v %#v", lr.Result.Terminals, dr.Result.Value, build(lr.Result.Terminals, dr.Result.Value))
+	dump := fmt.Sprintf("%#v %#v %#v", lr.Result.Terminals, dr.Result.Value, build(lr.Result.Terminals, dr.Result.Value, nil))
 	if strings.Contains(dump, "SECRET") {
 		t.Errorf("a private field survived decoding:\n%s", dump)
 	}
@@ -228,7 +228,7 @@ func TestBuildPlacesAndFilters(t *testing.T) {
 		term("peer/t1", "working", 0, "0"), // another machine's terminal
 		term("t9", "", 0, "0"),             // a shell: never reported a status
 	}
-	s := build(terms, l)
+	s := build(terms, l, nil)
 	var got []string
 	for _, a := range s.Agents {
 		got = append(got, a.PaneID+"@"+a.WorkspaceID+"/"+a.TabID)

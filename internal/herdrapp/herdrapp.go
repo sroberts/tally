@@ -114,7 +114,8 @@ type Status struct {
 	Pane  string `json:"focused_pane"`
 }
 
-// Viewer reads the window's focus and nothing else.
+// Viewer reads the window and nothing else: its focus (status) and its
+// sidebar's order (ls).
 type Viewer struct {
 	Path string
 }

@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/sroberts/tally/internal/herdr"
 )
@@ -204,19 +205,28 @@ func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	}
 	// A closed window only means no focus; the lights still work. One that
 	// answers also knows the sidebar's order across machines; one that
-	// doesn't isn't asked twice, so a hung window costs one short timeout.
+	// doesn't answer status isn't asked ls. The last order the window gave
+	// stands whenever it doesn't give one, so a slow window never reorders
+	// the slots.
 	focus := ""
+	var order []string
 	if c.App != nil {
 		if st, err := c.App.Status(); err == nil {
 			if st.Pane != "" {
 				focus = l.terminalAt(st.Pane)
 			}
-			if ids, err := c.App.Spaces(); err == nil {
-				l = l.ordered(ids)
-			}
+			order, _ = c.App.Spaces()
 		}
 	}
-	s := buildWith(list.Terminals, l, machines)
+	c.mu.Lock()
+	if order != nil {
+		c.order = order
+	} else {
+		order = c.order
+	}
+	c.mu.Unlock()
+	l = l.ordered(order)
+	s := build(list.Terminals, l, machines)
 	if focus != "" {
 		s.FocusedPaneID = &focus
 	}
@@ -229,38 +239,76 @@ type machine struct {
 	State string `json:"state"` // connecting, connected, needs_login or unreachable
 }
 
-// world is worldOf for the machines herdr-core lists now. A core that can't
-// list machines is read alone.
+// world is worldOf for the machines herdr-core lists now, from the same
+// terminal.list record Snapshot reads, so the two agree on which count.
 func (c *Client) world() (layout, map[string]bool, error) {
-	var ms struct {
+	ms, err := c.machines()
+	if err != nil {
+		return layout{}, nil, err
+	}
+	return c.worldOf(ms)
+}
+
+// machines lists the machines added to herdr-core, connected or not.
+func (c *Client) machines() ([]machine, error) {
+	var list struct {
 		Machines []machine `json:"machines"`
 	}
-	if err := c.Call("machine.list", nil, &ms); err != nil {
-		ms.Machines = nil
-	}
-	return c.worldOf(ms.Machines)
+	err := c.Call("terminal.list", nil, &list)
+	return list.Machines, err
 }
 
 // worldOf reads the layout across machines: this core's document, then each
 // connected machine's in the order given, prefixed. It also returns the
-// connected machines' names. A machine whose document can't be read is left
-// out rather than failing the whole read.
+// connected machines' names.
 func (c *Client) worldOf(ms []machine) (layout, map[string]bool, error) {
 	l, err := c.layoutOn("")
 	if err != nil {
 		return layout{}, nil, err
 	}
+	r, machines := c.remoteSpaces(ms)
+	l.Spaces = append(l.Spaces, r...)
+	return l, machines, nil
+}
+
+// remoteSpaces reads every connected machine's layout at once, prefixed, in
+// the order ms gives, and returns those machines' names. A machine whose
+// document doesn't answer keeps its last good layout, so one slow read over
+// the network doesn't drop its agents and renumber the slots; one never
+// read yet is left out.
+func (c *Client) remoteSpaces(ms []machine) ([]space, map[string]bool) {
 	machines := map[string]bool{}
+	var names []string
 	for _, m := range ms {
-		if m.State != "connected" || m.Name == "" {
-			continue
-		}
-		machines[m.Name] = true
-		if ml, err := c.layoutOn(m.Name); err == nil {
-			l.Spaces = append(l.Spaces, ml.under(m.Name).Spaces...)
+		if m.State == "connected" && m.Name != "" && !machines[m.Name] {
+			machines[m.Name] = true
+			names = append(names, m.Name)
 		}
 	}
-	return l, machines, nil
+	read := make([]*layout, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Go(func() {
+			if ml, err := c.layoutOn(name); err == nil {
+				ml = ml.under(name)
+				read[i] = &ml
+			}
+		})
+	}
+	wg.Wait()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.remote == nil {
+		c.remote = map[string]layout{}
+	}
+	var spaces []space
+	for i, name := range names {
+		if read[i] != nil {
+			c.remote[name] = *read[i]
+		}
+		spaces = append(spaces, c.remote[name].Spaces...)
+	}
+	return spaces, machines
 }
 
 // layoutOn reads the app's layout document on machine ("" for this core);
@@ -290,16 +338,18 @@ func (c *Client) HasLayout() (bool, error) {
 	if err != nil || len(l.Spaces) > 0 {
 		return len(l.Spaces) > 0, err
 	}
-	l, _, err = c.world()
-	return len(l.Spaces) > 0, err
+	ms, err := c.machines()
+	if err != nil {
+		return false, err
+	}
+	r, _ := c.remoteSpaces(ms)
+	return len(r) > 0, nil
 }
 
-// build is buildWith for this machine's terminals alone.
-func build(terms []terminal, l layout) *herdr.Snapshot { return buildWith(terms, l, nil) }
-
-// buildWith is Snapshot without the socket. machines names the connected
-// machines whose terminals (machine/t7) count.
-func buildWith(terms []terminal, l layout, machines map[string]bool) *herdr.Snapshot {
+// build is Snapshot without the socket. machines names the connected
+// machines whose terminals (machine/t7) count; nil counts this machine's
+// alone.
+func build(terms []terminal, l layout, machines map[string]bool) *herdr.Snapshot {
 	agents := make(map[string]terminal, len(terms))
 	for _, t := range terms {
 		m := machineOf(t.Address)
