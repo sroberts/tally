@@ -711,5 +711,9 @@ $("talk-text").addEventListener("keydown", (e) => {
 $("talk").addEventListener("submit", (e) => { e.preventDefault(); sendTalk(); });
 $("talk-cancel").addEventListener("click", closeTalk);
 document.addEventListener("touchstart", () => {}, { passive: true }); // :active on iOS
+// iOS Safari pinches even with user-scalable=no; its gesture events are the only way to stop it.
+for (const t of ["gesturestart", "gesturechange", "gestureend"]) {
+  document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+}
 connect();
 loop();
