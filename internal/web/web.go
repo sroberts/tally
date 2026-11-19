@@ -466,9 +466,11 @@ func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/manifest+json")
 	// No start_url: the home screen copy opens the address it was saved
 	// from, which carries a sign-in code (see installCode).
-	// The icon's keys sit inside the maskable safe zone (the middle 80%
-	// circle), so Android may crop the 512 px one to its own shape.
-	w.Write([]byte(`{"id":"/","name":"tally","short_name":"tally","scope":"/","display":"standalone",` +
+	// No id either: Chrome derives it from that address, so existing
+	// installs keep theirs. The icon's keys sit inside the maskable safe zone
+	// (the middle 80% circle), so Android may crop the 512 px one to its own
+	// shape.
+	w.Write([]byte(`{"name":"tally","short_name":"tally","scope":"/","display":"standalone",` +
 		`"orientation":"portrait","background_color":"#0f0e12","theme_color":"#000000",` +
 		`"icons":[{"src":"/icon-180.png","sizes":"180x180","type":"image/png"},` +
 		`{"src":"/icon-512.png","sizes":"512x512","type":"image/png"},` +

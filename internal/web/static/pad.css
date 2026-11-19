@@ -49,10 +49,12 @@
 }
 
 * { box-sizing: border-box; }
-/* Pinch zoom is off (iOS ignores user-scalable=no, so touch-action does it,
-   with pad.js's gesture listeners for iOS's own pinch events). Double-tap
-   zoom and the tap delay are off on everything you touch. */
-html, body { margin: 0; height: 100%; touch-action: pan-x pan-y; overscroll-behavior: none; }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+/* On the pad, pinch zoom is off (iOS ignores user-scalable=no, so
+   touch-action does it, with pad.js's gesture listeners for iOS's own pinch
+   events). The sign-in page stays zoomable. Double-tap zoom and the tap
+   delay are off on everything you touch. */
+html:has(> body.app), body.app { touch-action: pan-x pan-y; }
 a, button, input, select, textarea, label { touch-action: manipulation; }
 body {
   background: var(--surface);
