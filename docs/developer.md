@@ -119,7 +119,7 @@ tally doctor
 
 ## Rules that hold across changes
 
-- The serial path stays read-only. Only `tally serve --remote`/`--web` and `tally act` construct a herdr writer (`herdr.Writer` or `herdrcore.Writer`). The read path reaches the Herdr window only through `herdrapp.Viewer`, which can send nothing but `status`.
+- The serial path stays read-only. Only `tally serve --remote`/`--web` and `tally act` construct a herdr writer (`herdr.Writer` or `herdrcore.Writer`). The read path reaches the Herdr window only through `herdrapp.Viewer`, which can send nothing but `status` and `ls`, both reads.
 - Clients send action names, never keys. Actions are never retried. Nothing is accepted from a phone before auth, or from a browser before sign-in.
 - No agent titles, cwds or terminal output leave the host or reach a log line.
 - The v2 serial frame stays byte-compatible with the pad firmware in [vibe-macropad](https://github.com/sroberts/vibe-macropad). Protocol changes for remote clients go in v3 only, and change every client with it.

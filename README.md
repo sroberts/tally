@@ -50,7 +50,8 @@ tally reads the Herdr app when it's running (through herdr-core, the server behi
 
 With the Herdr app:
 
-- The slots follow the app's sidebar: spaces, then tabs, then panes.
+- **Run tally on the computer where the Herdr app runs**, even if your agents run on another machine. tally drives the app's window, and the window can only be reached from its own computer. Agents on machines the app connects to (`hc machine add`) show up as they do in the app, for example `mm/t7` for a terminal on a machine you named `mm`. Keys reach them through the app computer's herdr-core.
+- The slots follow the app's sidebar across every machine: spaces, then tabs, then panes.
 - Focusing an agent, zoom, and new or resumed Claude tabs need the app's window open. Without it the lights and DRIVE keys still work, and the focused agent isn't marked.
 - **talk** doesn't type into agents yet: herdr-core can only paste text and press Enter together, and talk's text must wait for **enter**. Every other key works.
 

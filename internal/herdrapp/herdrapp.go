@@ -6,7 +6,7 @@
 // command, closing tabs and quitting included. Tally reaches it only through
 // two allowlists: a Viewer reads the window's focus, and a Window adds the
 // three commands the action table needs (show an agent, zoom a pane, open a
-// tab).
+// tab). Viewer sends only status and ls, which read.
 package herdrapp
 
 import (
@@ -50,11 +50,15 @@ var allowedDo = map[string]bool{
 	"tab.new":     true, // open a tab; argv comes only from herdr.Command
 }
 
-// SocketPath is the window's control socket: herdr-app.sock in
-// $HERDR_APP_HOME, by default ~/.config/herdr-app.
+// SocketPath is the window's control socket: herdr-app.sock in the app's
+// home, found as the app finds it: $HERDR_APP_HOME, else
+// $XDG_CONFIG_HOME/herdr-app, else ~/.config/herdr-app.
 func SocketPath() (string, error) {
 	if d := os.Getenv("HERDR_APP_HOME"); d != "" {
 		return filepath.Join(d, "herdr-app.sock"), nil
+	}
+	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
+		return filepath.Join(d, "herdr-app", "herdr-app.sock"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -110,7 +114,8 @@ type Status struct {
 	Pane  string `json:"focused_pane"`
 }
 
-// Viewer reads the window's focus and nothing else.
+// Viewer reads the window and nothing else: its focus (status) and its
+// sidebar's order (ls).
 type Viewer struct {
 	Path string
 }
@@ -122,6 +127,32 @@ func (v *Viewer) Status() (Status, error) {
 		Status bool `json:"status"`
 	}{true}, &s, StatusTimeout)
 	return s, scrub("status", err)
+}
+
+// Spaces reads the window's sidebar order: every space's id, a connected
+// machine's prefixed by its name (mm/sp1) as the app names it. Names,
+// folders and terminals in the reply are not declared, so they are dropped.
+func (v *Viewer) Spaces() ([]string, error) {
+	var w struct {
+		Spaces []struct {
+			ID      string  `json:"id"`
+			Machine *string `json:"machine"` // null for this computer
+		} `json:"spaces"`
+	}
+	if err := call(v.Path, struct {
+		Ls bool `json:"ls"`
+	}{true}, &w, StatusTimeout); err != nil {
+		return nil, scrub("ls", err)
+	}
+	ids := make([]string, 0, len(w.Spaces))
+	for _, sp := range w.Spaces {
+		id := sp.ID
+		if m := sp.Machine; m != nil && *m != "" && !strings.HasPrefix(id, *m+"/") {
+			id = *m + "/" + id
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 // Window runs the action table's window commands.

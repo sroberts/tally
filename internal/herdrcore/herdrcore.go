@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/sroberts/tally/internal/herdr"
@@ -37,7 +38,7 @@ const maxLine = 16 << 20
 var allowed = map[string]bool{
 	"hello":            true,
 	"terminal.list":    true,
-	"doc.get":          true,
+	"doc.get":          true, // this core's and connected machines' (on) layouts
 	"events.subscribe": true,
 }
 
@@ -80,9 +81,15 @@ func dirExists(path string) bool {
 // core restart never leaves tally holding a dead connection.
 type Client struct {
 	Path string
-	// App, when set, is the Herdr window Snapshot asks for focus. It can
-	// only read the window's status.
+	// App, when set, is the Herdr window Snapshot asks for focus and its
+	// sidebar's order. It can only read the window.
 	App *herdrapp.Viewer
+
+	// Last good reads, so one slow answer doesn't reorder the slots: each
+	// connected machine's layout (prefixed) and the window's sidebar order.
+	mu     sync.Mutex
+	remote map[string]layout
+	order  []string
 }
 
 // New returns a client for the socket at path.

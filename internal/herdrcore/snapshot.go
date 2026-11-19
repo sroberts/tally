@@ -1,8 +1,10 @@
 package herdrcore
 
 import (
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/sroberts/tally/internal/herdr"
 )
@@ -35,15 +37,21 @@ type terminal struct {
 
 // layout is the part of the app's layout document tally declares: ids,
 // order and space names. Folders and tab names are dropped while decoding.
+// Each machine keeps its own document; world joins them, with a connected
+// machine's ids prefixed by its name the way the app shows them (mm/t7).
 type layout struct {
-	Spaces []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"` // the space's name in the app's sidebar
-		Tabs []struct {
-			ID   string `json:"id"`
-			Root node   `json:"root"`
-		} `json:"tabs"`
-	} `json:"spaces"`
+	Spaces []space `json:"spaces"`
+}
+
+type space struct {
+	ID   string `json:"id"`
+	Name string `json:"name"` // the space's name in the app's sidebar
+	Tabs []tab  `json:"tabs"`
+}
+
+type tab struct {
+	ID   string `json:"id"`
+	Root node   `json:"root"`
 }
 
 // node is one node of a tab's layout tree: a row or column of children, or
@@ -54,6 +62,72 @@ type node struct {
 	Content  *struct {
 		Terminal string `json:"terminal"`
 	} `json:"content"`
+}
+
+// under returns n with every id and terminal prefixed by machine.
+func (n node) under(machine string) node {
+	out := node{ID: prefixed(machine, n.ID)}
+	if n.Content != nil {
+		out.Content = &struct {
+			Terminal string `json:"terminal"`
+		}{prefixed(machine, n.Content.Terminal)}
+	}
+	for _, c := range n.Children {
+		out.Children = append(out.Children, c.under(machine))
+	}
+	return out
+}
+
+// under returns a connected machine's layout in the app's terms: its space,
+// tab and pane ids and its terminals prefixed by the machine's name.
+func (l layout) under(machine string) layout {
+	var out layout
+	for _, sp := range l.Spaces {
+		ns := space{ID: prefixed(machine, sp.ID), Name: sp.Name}
+		for _, t := range sp.Tabs {
+			ns.Tabs = append(ns.Tabs, tab{ID: prefixed(machine, t.ID), Root: t.Root.under(machine)})
+		}
+		out.Spaces = append(out.Spaces, ns)
+	}
+	return out
+}
+
+// prefixed names id on machine as the app does: machine/id, or id alone for
+// this machine (machine "").
+func prefixed(machine, id string) string {
+	if machine == "" || id == "" {
+		return id
+	}
+	return machine + "/" + id
+}
+
+// machineOf is the machine an address such as mm/t7 lives on, "" for this one.
+func machineOf(address string) string {
+	if i := strings.LastIndex(address, "/"); i >= 0 {
+		return address[:i]
+	}
+	return ""
+}
+
+// ordered returns l with its spaces in the order of ids (the window's
+// sidebar). Spaces ids doesn't name keep their order after those.
+func (l layout) ordered(ids []string) layout {
+	if len(ids) == 0 {
+		return l
+	}
+	rank := make(map[string]int, len(ids))
+	for i, id := range ids {
+		rank[id] = i + 1
+	}
+	out := layout{Spaces: append([]space(nil), l.Spaces...)}
+	sort.SliceStable(out.Spaces, func(i, j int) bool {
+		ri, rj := rank[out.Spaces[i].ID], rank[out.Spaces[j].ID]
+		if ri == 0 || rj == 0 {
+			return ri != 0 && rj == 0
+		}
+		return ri < rj
+	})
+	return out
 }
 
 // find returns the first block under n, in layout order, that match accepts.
@@ -112,40 +186,141 @@ func (n node) terminals(out []string) []string {
 // Snapshot reads herdr-core's terminals and the app's layout and returns
 // them as a herdr.Snapshot. Agents come in the app's sidebar order: spaces,
 // then tabs, then each tab's terminals in layout order. A terminal the app
-// labels but hasn't placed yet goes after those. Focus belongs to the app
-// window, not to herdr-core: FocusedPaneID is the terminal in the window's
-// focused pane when App is set and the window answers, else nil.
+// labels but hasn't placed yet goes after those. Terminals and spaces on a
+// connected machine count too, with the app's machine/ prefix, so tally on
+// the computer running the app sees what its window shows. Focus belongs to
+// the app window, not to herdr-core: FocusedPaneID is the terminal in the
+// window's focused pane when App is set and the window answers, else nil.
 func (c *Client) Snapshot() (*herdr.Snapshot, error) {
 	var list struct {
 		Terminals []terminal `json:"terminals"`
+		Machines  []machine  `json:"machines"` // added here, connected or not
 	}
 	if err := c.Call("terminal.list", nil, &list); err != nil {
 		return nil, err
 	}
-	l, err := c.layout()
+	l, machines, err := c.worldOf(list.Machines)
 	if err != nil {
 		return nil, err
 	}
-	s := build(list.Terminals, l)
+	// A closed window only means no focus; the lights still work. One that
+	// answers also knows the sidebar's order across machines; one that
+	// doesn't answer status isn't asked ls. The last order the window gave
+	// stands whenever it doesn't give one, so a slow window never reorders
+	// the slots.
+	focus := ""
+	var order []string
 	if c.App != nil {
-		// A closed window only means no focus; the lights still work.
-		if st, err := c.App.Status(); err == nil && st.Pane != "" {
-			if t := l.terminalAt(st.Pane); t != "" {
-				s.FocusedPaneID = &t
+		if st, err := c.App.Status(); err == nil {
+			if st.Pane != "" {
+				focus = l.terminalAt(st.Pane)
 			}
+			order, _ = c.App.Spaces()
 		}
+	}
+	c.mu.Lock()
+	if order != nil {
+		c.order = order
+	} else {
+		order = c.order
+	}
+	c.mu.Unlock()
+	l = l.ordered(order)
+	s := build(list.Terminals, l, machines)
+	if focus != "" {
+		s.FocusedPaneID = &focus
 	}
 	return s, nil
 }
 
-// layout reads the app's layout document; empty before the app first runs.
-func (c *Client) layout() (layout, error) {
+// machine is the part of a herdr-core machine record tally declares.
+type machine struct {
+	Name  string `json:"name"`  // what this core calls it: mm in mm/t7
+	State string `json:"state"` // connecting, connected, needs_login or unreachable
+}
+
+// world is worldOf for the machines herdr-core lists now, from the same
+// terminal.list record Snapshot reads, so the two agree on which count.
+func (c *Client) world() (layout, map[string]bool, error) {
+	ms, err := c.machines()
+	if err != nil {
+		return layout{}, nil, err
+	}
+	return c.worldOf(ms)
+}
+
+// machines lists the machines added to herdr-core, connected or not.
+func (c *Client) machines() ([]machine, error) {
+	var list struct {
+		Machines []machine `json:"machines"`
+	}
+	err := c.Call("terminal.list", nil, &list)
+	return list.Machines, err
+}
+
+// worldOf reads the layout across machines: this core's document, then each
+// connected machine's in the order given, prefixed. It also returns the
+// connected machines' names.
+func (c *Client) worldOf(ms []machine) (layout, map[string]bool, error) {
+	l, err := c.layoutOn("")
+	if err != nil {
+		return layout{}, nil, err
+	}
+	r, machines := c.remoteSpaces(ms)
+	l.Spaces = append(l.Spaces, r...)
+	return l, machines, nil
+}
+
+// remoteSpaces reads every connected machine's layout at once, prefixed, in
+// the order ms gives, and returns those machines' names. A machine whose
+// document doesn't answer keeps its last good layout, so one slow read over
+// the network doesn't drop its agents and renumber the slots; one never
+// read yet is left out.
+func (c *Client) remoteSpaces(ms []machine) ([]space, map[string]bool) {
+	machines := map[string]bool{}
+	var names []string
+	for _, m := range ms {
+		if m.State == "connected" && m.Name != "" && !machines[m.Name] {
+			machines[m.Name] = true
+			names = append(names, m.Name)
+		}
+	}
+	read := make([]*layout, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Go(func() {
+			if ml, err := c.layoutOn(name); err == nil {
+				ml = ml.under(name)
+				read[i] = &ml
+			}
+		})
+	}
+	wg.Wait()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.remote == nil {
+		c.remote = map[string]layout{}
+	}
+	var spaces []space
+	for i, name := range names {
+		if read[i] != nil {
+			c.remote[name] = *read[i]
+		}
+		spaces = append(spaces, c.remote[name].Spaces...)
+	}
+	return spaces, machines
+}
+
+// layoutOn reads the app's layout document on machine ("" for this core);
+// empty before the app first lays anything out there.
+func (c *Client) layoutOn(machine string) (layout, error) {
 	var doc struct {
 		Value *layout `json:"value"` // null before the app first runs
 	}
 	if err := c.Call("doc.get", struct {
 		Name string `json:"name"`
-	}{LayoutDoc}, &doc); err != nil {
+		On   string `json:"on,omitempty"`
+	}{LayoutDoc, machine}, &doc); err != nil {
 		return layout{}, err
 	}
 	if doc.Value == nil {
@@ -154,18 +329,33 @@ func (c *Client) layout() (layout, error) {
 	return *doc.Value, nil
 }
 
-// HasLayout reports whether the Herdr app has laid out any space, reading
-// only the layout document.
+// HasLayout reports whether the Herdr app has laid out any space, here or on
+// a connected machine, reading only layout documents. This core's comes
+// first, so other machines are asked only when it has none: an app whose
+// spaces all live on a connected machine still counts.
 func (c *Client) HasLayout() (bool, error) {
-	l, err := c.layout()
-	return len(l.Spaces) > 0, err
+	l, err := c.layoutOn("")
+	if err != nil || len(l.Spaces) > 0 {
+		return len(l.Spaces) > 0, err
+	}
+	ms, err := c.machines()
+	if err != nil {
+		return false, err
+	}
+	r, _ := c.remoteSpaces(ms)
+	return len(r) > 0, nil
 }
 
-// build is Snapshot without the socket.
-func build(terms []terminal, l layout) *herdr.Snapshot {
+// build is Snapshot without the socket. machines names the connected
+// machines whose terminals (machine/t7) count; nil counts this machine's
+// alone.
+func build(terms []terminal, l layout, machines map[string]bool) *herdr.Snapshot {
 	agents := make(map[string]terminal, len(terms))
 	for _, t := range terms {
-		if t.State == "live" && t.Status != nil && !strings.Contains(t.Address, "/") {
+		m := machineOf(t.Address)
+		if t.State == "live" && t.Status != nil && (m == "" || machines[m]) {
+			// Labels name ids local to the terminal's machine.
+			t.Labels.Space, t.Labels.Tab = prefixed(m, t.Labels.Space), prefixed(m, t.Labels.Tab)
 			agents[t.Address] = t
 		}
 	}
